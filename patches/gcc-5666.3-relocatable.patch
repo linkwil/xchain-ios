@@ -1,0 +1,226 @@
+--- ../../gcc-5666.3/gcc/gcc.c-orig	2012-01-02 15:42:36.064802947 +0000
++++ ../../gcc-5666.3/gcc/gcc.c	2012-01-02 16:12:14.716649912 +0000
+@@ -1524,25 +1524,33 @@
+ #define MD_STARTFILE_PREFIX_1 ""
+ #endif
+ 
++/* These directories are locations set at configure-time based on the
++   --prefix option provided to configure.  Their initializers are
++   defined in Makefile.in.  These paths are not *directly* used when
++   gcc_exec_prefix is set because, in that case, we know where the
++   compiler has been installed, and use paths relative to that
++   location instead.  */
+ static const char *const standard_exec_prefix = STANDARD_EXEC_PREFIX;
++static const char *const standard_libexec_prefix = STANDARD_LIBEXEC_PREFIX;
++static const char *const standard_bindir_prefix = STANDARD_BINDIR_PREFIX;
++static const char *const standard_startfile_prefix = STANDARD_STARTFILE_PREFIX;
++
++/* For native compilers, these are well-known paths containing
++   components that may be provided by the system.  For cross
++   compilers, these paths are not used.  */
+ static const char *const standard_exec_prefix_1 = "/usr/libexec/gcc/";
+ static const char *const standard_exec_prefix_2 = "/usr/lib/gcc/";
+ static const char *md_exec_prefix = MD_EXEC_PREFIX;
+-
+ static const char *md_startfile_prefix = MD_STARTFILE_PREFIX;
+ static const char *md_startfile_prefix_1 = MD_STARTFILE_PREFIX_1;
+-static const char *const standard_startfile_prefix = STANDARD_STARTFILE_PREFIX;
+ static const char *const standard_startfile_prefix_1
+   = STANDARD_STARTFILE_PREFIX_1;
+ static const char *const standard_startfile_prefix_2
+   = STANDARD_STARTFILE_PREFIX_2;
+ 
++/* A relative path to be used in finding the location of tools
++   relative to the driver.  */
+ static const char *const tooldir_base_prefix = TOOLDIR_BASE_PREFIX;
+-static const char *tooldir_prefix;
+-
+-static const char *const standard_bindir_prefix = STANDARD_BINDIR_PREFIX;
+-
+-static const char *standard_libexec_prefix = STANDARD_LIBEXEC_PREFIX;
+ 
+ /* Subdirectory to use for locating libraries.  Set by
+    set_multilib_dir based on the compilation options.  */
+@@ -2805,6 +2813,7 @@
+ }
+ 
+ /* Same as add_prefix, but prepending target_system_root to prefix.  */
++/* The target_system_root prefix has been relocated by gcc_exec_prefix.  */
+ static void
+ add_sysrooted_prefix (struct path_prefix *pprefix, const char *prefix,
+ 		      const char *component,
+@@ -3383,6 +3392,7 @@
+   int is_modify_target_name;
+   unsigned int j;
+ #endif
++  const char *tooldir_prefix;
+ 
+   GET_ENVIRONMENT (gcc_exec_prefix, "GCC_EXEC_PREFIX");
+ 
+@@ -3495,10 +3505,18 @@
+       gcc_libexec_prefix = make_relative_prefix (tmp_prefix,
+ 						 standard_exec_prefix,
+ 						 standard_libexec_prefix);
++
++      /* The path is unrelocated, so fallback to the original setting.  */
++      if (!gcc_libexec_prefix)
++	gcc_libexec_prefix = standard_libexec_prefix;
++
+       free (tmp_prefix);
+     }
+ #else
+ #endif
++  /* From this point onward, gcc_exec_prefix is non-null if the toolchain
++     is relocated. The toolchain was either relocated using GCC_EXEC_PREFIX
++     or an automatically created GCC_EXEC_PREFIX from argv[0].  */
+ 
+   if (gcc_exec_prefix)
+     {
+@@ -4103,12 +4121,15 @@
+       use_pipes = 0;
+     }
+ 
+-  /* Set up the search paths before we go looking for config files.  */
++  /* Set up the search paths.  We add directories that we expect to
++     contain GNU Toolchain components before directories specified by
++     the machine description so that we will find GNU components (like
++     the GNU assembler) before those of the host system.  */
+ 
+-  /* These come before the md prefixes so that we will find gcc's subcommands
+-     (such as cpp) rather than those of the host system.  */
+-  /* Use 2 as fourth arg meaning try just the machine as a suffix,
+-     as well as trying the machine and the version.  */
++  /* If we don't know where the toolchain has been installed, use the
++     configured-in locations.  */
++  if (!gcc_exec_prefix)
++    {
+ #ifndef OS2
+   add_prefix (&exec_prefixes, standard_libexec_prefix, "GCC",
+ 	      PREFIX_PRIORITY_LAST, 1, 0);
+@@ -4116,51 +4137,35 @@
+ 	      PREFIX_PRIORITY_LAST, 2, 0);
+   add_prefix (&exec_prefixes, standard_exec_prefix, "BINUTILS",
+ 	      PREFIX_PRIORITY_LAST, 2, 0);
++#endif
++      add_prefix (&startfile_prefixes, standard_exec_prefix, "BINUTILS",
++		  PREFIX_PRIORITY_LAST, 1, 0);
++    }
++  /* If not cross-compiling, search well-known system locations.  */
++  if (*cross_compile == '0')
++    {
++#ifndef OS2
+   add_prefix (&exec_prefixes, standard_exec_prefix_1, "BINUTILS",
+ 	      PREFIX_PRIORITY_LAST, 2, 0);
+   add_prefix (&exec_prefixes, standard_exec_prefix_2, "BINUTILS",
+ 	      PREFIX_PRIORITY_LAST, 2, 0);
+ #endif
+-
+-  add_prefix (&startfile_prefixes, standard_exec_prefix, "BINUTILS",
+-	      PREFIX_PRIORITY_LAST, 1, 0);
+   add_prefix (&startfile_prefixes, standard_exec_prefix_2, "BINUTILS",
+ 	      PREFIX_PRIORITY_LAST, 1, 0);
++    }
+ 
++  gcc_assert (!IS_ABSOLUTE_PATH (tooldir_base_prefix));
+   tooldir_prefix = concat (tooldir_base_prefix, spec_machine,
+ 			   dir_separator_str, NULL);
+ 
+-  /* If tooldir is relative, base it on exec_prefixes.  A relative
+-     tooldir lets us move the installed tree as a unit.
+-
+-     If GCC_EXEC_PREFIX is defined, then we want to add two relative
+-     directories, so that we can search both the user specified directory
+-     and the standard place.  */
+-
+-  if (!IS_ABSOLUTE_PATH (tooldir_prefix))
+-    {
+-      if (gcc_exec_prefix)
+-	{
+-	  char *gcc_exec_tooldir_prefix
+-	    = concat (gcc_exec_prefix, spec_machine, dir_separator_str,
++  /* Look for tools relative to the location from which the driver is
++     running, or, if that is not available, the configured prefix.  */
++  tooldir_prefix
++    = concat (gcc_exec_prefix ? gcc_exec_prefix : standard_exec_prefix,
++	      spec_machine, dir_separator_str,
+ 		      spec_version, dir_separator_str, tooldir_prefix, NULL);
+ 
+ 	  add_prefix (&exec_prefixes,
+-		      concat (gcc_exec_tooldir_prefix, "bin",
+-			      dir_separator_str, NULL),
+-		      NULL, PREFIX_PRIORITY_LAST, 0, 0);
+-	  add_prefix (&startfile_prefixes,
+-		      concat (gcc_exec_tooldir_prefix, "lib",
+-			      dir_separator_str, NULL),
+-		      NULL, PREFIX_PRIORITY_LAST, 0, 1);
+-	}
+-
+-      tooldir_prefix = concat (standard_exec_prefix, spec_machine,
+-			       dir_separator_str, spec_version,
+-			       dir_separator_str, tooldir_prefix, NULL);
+-    }
+-
+-  add_prefix (&exec_prefixes,
+ 	      concat (tooldir_prefix, "bin", dir_separator_str, NULL),
+ 	      "BINUTILS", PREFIX_PRIORITY_LAST, 0, 0);
+   add_prefix (&startfile_prefixes,
+@@ -6681,30 +6686,30 @@
+ 			      SYSROOT_PRIORITY, 0, 1);
+       else if (*cross_compile == '0')
+ 	{
+-	  if (gcc_exec_prefix)
+-	    add_prefix (&startfile_prefixes,
+-			concat (gcc_exec_prefix, machine_suffix,
+-				standard_startfile_prefix, NULL),
+-			NULL, PREFIX_PRIORITY_LAST, 0, 1);
+ 
+ 	  /* APPLE LOCAL begin ARM sysroot startfile_prefixes */
+ 	  /* All absolute startfile_prefixes must be sysrooted so we
+ 	     don't pick up host headers.  */
+-	  if (IS_ABSOLUTE_PATH (standard_exec_prefix))
++	  if (IS_ABSOLUTE_PATH (gcc_exec_prefix
++                              ? gcc_exec_prefix : standard_exec_prefix))
+ 	    add_sysrooted_prefix (&startfile_prefixes,
+-				  concat (standard_exec_prefix,
++				  concat (gcc_exec_prefix
++					  ? gcc_exec_prefix : standard_exec_prefix,
+ 					  machine_suffix,
+ 					  standard_startfile_prefix, NULL),
+ 				  NULL, PREFIX_PRIORITY_LAST, 0, 1);
+ 	  else
+ 	    add_prefix (&startfile_prefixes,
+-			concat (standard_exec_prefix,
++		      concat (gcc_exec_prefix
++			      ? gcc_exec_prefix : standard_exec_prefix,
+ 				machine_suffix,
+ 				standard_startfile_prefix, NULL),
+ 			NULL, PREFIX_PRIORITY_LAST, 0, 1);
+ 	  /* APPLE LOCAL end ARM sysroot startfile_prefixes */
+ 	}
+ 
++      /* Sysrooted prefixes are relocated because target_system_root is
++	 also relocated by gcc_exec_prefix.  */
+       if (*standard_startfile_prefix_1)
+  	add_sysrooted_prefix (&startfile_prefixes,
+ 			      standard_startfile_prefix_1, "BINUTILS",
+@@ -6750,7 +6755,9 @@
+ 
+   if (print_search_dirs)
+     {
+-      printf (_("install: %s%s\n"), standard_exec_prefix, machine_suffix);
++      printf (_("install: %s%s\n"),
++	      gcc_exec_prefix ? gcc_exec_prefix : standard_exec_prefix,
++	      gcc_exec_prefix ? "" : machine_suffix);
+       printf (_("programs: %s\n"),
+ 	      build_search_list (&exec_prefixes, "", false, false));
+       printf (_("libraries: %s\n"),
+--- ../../gcc-5666.3/gcc/Makefile.in-orig	2012-01-02 15:42:52.484382457 +0000
++++ ../../gcc-5666.3/gcc/Makefile.in	2012-01-02 16:13:35.275336181 +0000
+@@ -4057,6 +4057,7 @@
+ 	@echo "set HOSTCFLAGS \"$(CFLAGS)\"" >> ./tmp0
+ 	@echo "set TESTING_IN_BUILD_TREE 1" >> ./tmp0
+ 	@echo "set HAVE_LIBSTDCXX_V3 1" >> ./tmp0
++	@echo "set GCC_EXEC_PREFIX \"$(libdir)/gcc/\"" >> ./tmp0
+ # If newlib has been configured, we need to pass -B to gcc so it can find
+ # newlib's crt0.o if it exists.  This will cause a "path prefix not used"
+ # message if it doesn't, but the testsuite is supposed to ignore the message -
