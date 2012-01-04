@@ -313,19 +313,20 @@ fi
 # Doesn't work, xchain git repo has fixed the issues.
 build_cctools_iphonedev()
 {
- write_cctools_iphonedev_patches
  CCTOOLS_DIR=odcctools-9.2-ld
- if [ ! -d "${CCTOOLS_DIR}/.svn" ] || \
-  ([ -d "${CCTOOLS_DIR}/.svn" ] && confirm -N "odcctools checkout exists. Checkout again?"); then
+ if [ ! -d "${CCTOOLS_DIR}/.svn" ]  ; then
+#|| \
+#  ([ -d "${CCTOOLS_DIR}/.svn" ] && confirm -N "odcctools checkout exists. Checkout again?"); then
   echo "Checking out odcctools..."
   mkdir -p "${CCTOOLS_DIR}"
   svn co -r287 http://iphone-dev.googlecode.com/svn/branches/odcctools-9.2-ld "${CCTOOLS_DIR}"
   pushd "${CCTOOLS_DIR}"
-   patch -p0 < ../ld64_options.patch
+   write_cctools_iphonedev_patches
+   patch -p0 < ld64_options.patch
   popd
   # patch src/cctools/ld64/src/Options.h (#include <cstring> #include <limits.h>)
-  [ -d ${CCTOOLS_DIR}-build-${DARWIN_VER} ] || cp -rf ${CCTOOLS_DIR} ${CCTOOLS_DIR}-build-${DARWIN_VER}
  fi
+ [ -d ${CCTOOLS_DIR}-build-${DARWIN_VER} ] || cp -rf ${CCTOOLS_DIR} ${CCTOOLS_DIR}-build-${DARWIN_VER}
  pushd "${CCTOOLS_DIR}-build-${DARWIN_VER}"
   LDFLAGS="-m32" CFLAGS="-m32 -fpermissive" ./configure --prefix=$PREFIX/usr --target=$TARGET --with-sysroot=$PREFIX --enable-ld64
   make $MAKE_ARGS
@@ -558,7 +559,7 @@ fi
 
 prepare_osx_sdk $PREFIX
 
-if [ "$2" = "apple" -o "$2" = "xchain" ] ; then
+if [ "$2" = "apple" -o "$2" = "xchain" -o "$2" = "iphonedev" ] ; then
  USE_CCTOOLS=$2
 fi
 
