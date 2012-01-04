@@ -70,12 +70,6 @@ NEEDED_TOOLS="dmg2img xar zcat cpio svn patch bison flex"
 
 UNAME=`uname -s`
 
-if [ ! "$UNAME" = "Darwin" ] ; then
- NEEDED_TOOLS="$NEEDED_TOOLS xml2"
-fi
-
-export TARGET=i686-apple-darwin${DARWIN_VER}
-
 error_msg()
 {
     echo $1 >&2
@@ -98,6 +92,19 @@ downloadIfNotExists()
         fi
     fi
 }
+
+if [ ! "$UNAME" = "Darwin" ] ; then
+ NEEDED_TOOLS="$NEEDED_TOOLS xml2"
+else
+ echo "" > a.c
+ gcc a.c -c -o a.o
+ LIBTOOL_STATIC=$(libtool -static -o a.a a.o)
+ if [ "$?" = "1" ] ; then
+  error_msg "Libtool ($(which libtool)) is not Apple's libtool, probably gnu libtool. Please move it out of the way"
+ fi
+fi
+
+export TARGET=i686-apple-darwin${DARWIN_VER}
 
 missing_tools()
 {
