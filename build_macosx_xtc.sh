@@ -70,9 +70,38 @@ if [ -z $OSX_SDK_PKG ] ; then
 fi
 
 # Doesn't report missing gobjc stuff as detection of that is more complicated.
-NEEDED_TOOLS="dmg2img xar xml2 zcat cpio svn patch bison flex"
+NEEDED_TOOLS="dmg2img xar zcat cpio svn patch bison flex"
+
+UNAME=`uname -s`
+
+if [ ! "$UNAME" = "Darwin" ] ; then
+ NEEDED_TOOLS="$NEEDED_TOOLS xml2"
+fi
 
 export TARGET=i686-apple-darwin${DARWIN_VER}
+
+error_msg()
+{
+    echo $1 >&2
+    exit 1
+}
+
+removeAndExit()
+{
+    rm -fr $1 && error_msg "Can't download $1"
+}
+
+downloadIfNotExists()
+{
+    if [ ! -f $1 ]
+    then
+            if [ "$UNAME" = "Darwin" ] ; then
+            curl --insecure -S -L -O $2 || removeAndExit $1
+        else
+            wget --no-check-certificate -c $2 || removeAndExit $1
+        fi
+    fi
+}
 
 missing_tools()
 {
@@ -89,7 +118,7 @@ missing_tools()
 
 unpack_pkg()
 {
- xar -xf $1 Payload
+ xar -xf "$1" Payload
  if [ ! "$?" = "0" ] ; then
   echo "Failed to find pkg $1"
   exit 1
@@ -108,29 +137,39 @@ unpack_pkg()
 # ..works:
 # losetup -o 36864 /dev/loop0 xcode.img
 # mount -t hfsplus /dev/loop0 xcode-3.2.6
+
+# Now returns the path of the mount to $3
 mount_img()
 {
  local _IMG=$1
  local _DIR=$2
  local _RESULT=
 
- [ -d $_DIR ] || mkdir $_DIR
+ if [ "$UNAME" = "Linux" ] ; then
+  [ -d $_DIR ] || mkdir $_DIR
 
- sudo modprobe hfsplus
+  sudo modprobe hfsplus
 
- while true; do
-  sudo losetup -o 36864 /dev/loop0 $_IMG
-  _RESULT=$?
-  [ $_RESULT = 0 ] && break
-  # Workaround for if this script is interrupted between mount and umount
-  [ $_RESULT = 2 ] && sudo losetup -d /dev/loop0 2>&1 1>/dev/null
- done
+  while true; do
+   sudo losetup -o 36864 /dev/loop0 $_IMG
+   _RESULT=$?
+   [ $_RESULT = 0 ] && break
+   # Workaround for if this script is interrupted between mount and umount
+   [ $_RESULT = 2 ] && sudo losetup -d /dev/loop0 2>&1 1>/dev/null
+  done
 
- while true; do
-  sudo mount -t hfsplus /dev/loop0 $_DIR
-  _RESULT=$?
-  [ $_RESULT = 0 ] && break
- done
+  while true; do
+   sudo mount -t hfsplus /dev/loop0 $_DIR
+   _RESULT=$?
+   [ $_RESULT = 0 ] && break
+  done
+ else
+  # This works on OS X:
+  # hdiutil attach -imagekey diskimage-class=CRawDiskImage -nomount xcode.img
+  # but doesn't give control of the partitions ()
+  hdid xcode.img
+  eval $3="/Volumes/Xcode\ and\ iOS\ SDK"
+ fi
 }
 
 umount_img()
@@ -158,19 +197,37 @@ PREFIX=/$TARGET
 export DARWIN_PREFIX=$PREFIX
 [ -d $PREFIX ]   || sudo mkdir $PREFIX
 USER=`whoami`
-sudo chown $USER:$USER $PREFIX
+if [ "$UNAME" = "Darwin" ] ; then
+ GROUP=admin
+else
+ GROUP=`whoami`
+fi
+sudo chown $USER:$GROUP $PREFIX
 [ -d $ROOT/bin ] && PATH=$ROOT/bin:$PATH
 MISSING_TOOLS=$(missing_tools $NEEDED_TOOLS)
 
 if [ "$MISSING_TOOLS" = "xar" ] ; then
  echo "xar missing, Ubuntu Natty (and other creatures) doesn't provide a package, so compiling from source"
- [ -f xar-1.5.2.tar.gz ] || wget -c http://xar.googlecode.com/files/xar-1.5.2.tar.gz
+ downloadIfNotExists xar-1.5.2.tar.gz http://xar.googlecode.com/files/xar-1.5.2.tar.gz
  tar -xzvf xar-1.5.2.tar.gz
  pushd xar-1.5.2
   ./configure --prefix=$PWD/..
   make
   make install
  popd
+ [ -d $ROOT/bin ] && PATH=$ROOT/bin:$PATH
+ MISSING_TOOLS=$(missing_tools $NEEDED_TOOLS)
+elif [ "$MISSING_TOOLS" = "dmg2img" ] ; then
+ echo "dmg2img missing, Darwin doesn't provide a package, so compiling from source"
+ downloadIfNotExists dmg2img-1.6.2.tar.gz http://vu1tur.eu.org/tools/dmg2img-1.6.2.tar.gz
+ tar -xzvf dmg2img-1.6.2.tar.gz
+ pushd dmg2img-1.6.2
+  make
+  [ -d $PWD/../bin ] || mkdir -p $PWD/../bin
+  cp dmg2img   $PWD/../bin/
+  cp vfdecrypt $PWD/../bin/
+ popd
+ [ -d $ROOT/bin ] && PATH=$ROOT/bin:$PATH
  MISSING_TOOLS=$(missing_tools $NEEDED_TOOLS)
 fi
 
@@ -185,17 +242,18 @@ prepare_osx_sdk()
  local _TARGET=$1
  if [ ! -d $_PWD/SDKs/$OSX_SDK ] ; then
   # Download Apple SDK (from xcode 3.2.6) and source code tarballs for cctools and llvmgcc.
-  [ -f xcode_3.2.6_and_ios_sdk_4.3.dmg ] || wget -c http://adcdownload.apple.com/Developer_Tools/xcode_3.2.6_and_ios_sdk_4.3__final/xcode_3.2.6_and_ios_sdk_4.3.dmg
+  downloadIfNotExists xcode_3.2.6_and_ios_sdk_4.3.dmg ] http://adcdownload.apple.com/Developer_Tools/xcode_3.2.6_and_ios_sdk_4.3__final/xcode_3.2.6_and_ios_sdk_4.3.dmg
  # Covert the xcode dmg to an img.
   [ -f xcode.img ]                       || dmg2img -v -i xcode_3.2.6_and_ios_sdk_4.3.dmg -o xcode.img
-  [ -d xcode-3.2.6 ]                     || mkdir xcode-3.2.6
-  mount_img xcode.img xcode-3.2.6
+  XCODE_MOUNT_PATH="unset"
+  mount_img xcode.img xcode-3.2.6 XCODE_MOUNT_PATH
   # Extract the Leopard SDK (Tiger might allow for PPC builds - not that that matters these days)
-  unpack_pkg xcode-3.2.6/Packages/${OSX_SDK_PKG}
-  umount_img xcode.img xcode-3.2.6
+  unpack_pkg "$XCODE_MOUNT_PATH"/Packages/${OSX_SDK_PKG}
+  umount_img xcode.img $XCODE_MOUNT_PATH
  fi
  if [ ! -d $_TARGET/Developer ] ; then
-  mkdir $_TARGET
+  sudo mkdir $_TARGET
+  sudo chown $USER:$GROUP $_TARGET
   pushd $_TARGET
    mkdir Developer
    cp -R $_PWD/SDKs Developer
@@ -216,7 +274,7 @@ prepare_osx_sdk()
 # Doesn't work; needs a lot of patching.
 build_cctools_apple()
 {
- [ -f cctools-809.tar.gz ] || wget -c http://www.opensource.apple.com/tarballs/cctools/cctools-809.tar.gz
+ downloadIfNotExists cctools-809.tar.gz http://www.opensource.apple.com/tarballs/cctools/cctools-809.tar.gz
  [ -d cctools-809 ]        || tar xzvf cctools-809.tar.gz
  [ -d cctools-809-build-${DARWIN_VER} ]  || cp -rf cctools-809 cctools-809-build-${DARWIN_VER}
  find cctools-809-build-${DARWIN_VER} | xargs touch
@@ -283,7 +341,7 @@ build_cctools_xchain()
    git clone https://github.com/tatsh/xchain.git xchain${XCHAIN_VER}
   fi
  fi
- cp -rf xchain xchain${XCHAIN_VER}-build-${DARWIN_VER}
+ cp -rf xchain${XCHAIN_VER} xchain${XCHAIN_VER}-build-${DARWIN_VER}
  CCTOOLS_DIR=xchain${XCHAIN_VER}-build-${DARWIN_VER}/odcctools-9.2-ld
  pushd "${CCTOOLS_DIR}"
   LDFLAGS="-m32" CFLAGS="-m32 -fpermissive" ./configure --prefix=$PREFIX/usr --target=$TARGET --with-sysroot=$PREFIX --enable-ld64
@@ -311,7 +369,7 @@ build_gcc()
  cp gcc-5666.3-t-darwin_prefix.patch xchain/patches/
  cp gcc-5666.3-strip_for_target.patch xchain/patches/
  cp gcc-5666.3-relocatable.patch xchain/patches/
- [ -f gcc-5666.3.tar.gz ] || wget -c http://opensource.apple.com/tarballs/gcc/gcc-5666.3.tar.gz
+ downloadIfNotExists gcc-5666.3.tar.gz ] http://opensource.apple.com/tarballs/gcc/gcc-5666.3.tar.gz
  if [ ! -d gcc-5666.3 ] ; then
   tar xvf gcc-5666.3.tar.gz
   pushd gcc-5666.3
@@ -363,7 +421,7 @@ build_llvm_gcc()
 
  # Need to build Apple's LLVM first.
  # This is somewhat intensive (lots of C++) so if you don't have a powerful PC do not use -j flag with make.
- [ -f llvmgcc42-2336.1.tar.gz ] || wget -c http://www.opensource.apple.com/tarballs/llvmgcc42/llvmgcc42-2336.1.tar.gz
+ downloadIfNotExists llvmgcc42-2336.1.tar.gz ] http://www.opensource.apple.com/tarballs/llvmgcc42/llvmgcc42-2336.1.tar.gz
  # Clean up because this is a two stage process and we patch between the stages.
  # rm -rf llvmgcc42-2336.1
  tar zxvf llvmgcc42-2336.1.tar.gz
@@ -494,7 +552,6 @@ if [ "$2" = "install" -o "$2" = "install-all" ] ; then
   PKGSUFFIX=apple-proprietary
  fi
  _PWD=$PWD
- UNAME=`uname -s`
  pushd ${FINAL_INSTALL}/${PREFIX}/..
   [ -f ${_PWD}/${TARGET}-gcc-4.2.1-llvm-gcc-4.2-${UNAME}-${PKGSUFFIX}.7z ] && rm -f ${_PWD}/${TARGET}-gcc-4.2.1-llvm-gcc-4.2-${UNAME}-${PKGSUFFIX}.7z
 #  7za a -t7z -mx=9 ${_PWD}/${TARGET}-gcc-4.2.1-llvm-gcc-4.2-${UNAME}-${PKGSUFFIX}.7z ${TARGET}
