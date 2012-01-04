@@ -8,6 +8,7 @@
 #define	_MACH_ARM__STRUCTS_H_
 
 #if __DARWIN_UNIX03
+#error good, ARM!
 #define _STRUCT_ARM_EXCEPTION_STATE	struct __darwin_arm_exception_state
 _STRUCT_ARM_EXCEPTION_STATE
 {

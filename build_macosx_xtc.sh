@@ -329,7 +329,6 @@ build_cctools_iphonedev()
 # Works, but must be built in-place.
 build_cctools_xchain()
 {
- [ -d xchain${XCHAIN_VER}-build ] && rm -rf xchain${XCHAIN_VER}-build
  if [ ! -d xchain${XCHAIN_VER} ] ; then
   if [ "$XCHAIN_VER" = "-ma" ] ; then
    git clone https://github.com/mingwandroid/xchain.git xchain${XCHAIN_VER}
@@ -337,6 +336,7 @@ build_cctools_xchain()
    git clone https://github.com/tatsh/xchain.git xchain${XCHAIN_VER}
   fi
  fi
+ [ -d xchain${XCHAIN_VER}-build-${DARWIN_VER} ] && rm -rf xchain${XCHAIN_VER}-build-${DARWIN_VER}
  cp -rf xchain${XCHAIN_VER} xchain${XCHAIN_VER}-build-${DARWIN_VER}
  CCTOOLS_DIR=xchain${XCHAIN_VER}-build-${DARWIN_VER}/odcctools-9.2-ld
  pushd "${CCTOOLS_DIR}"

@@ -1,7 +1,7 @@
 ARCH    =   arm
 
 CFILES_arm =	arm.c
-MYDEFS_arm =	-DARM
+MYDEFS_arm =	-DARM -D__DARWIN_UNIX03=__arm__
 MYLIBS_arm =	-lstuff
 
 VPATH=@srcdir@/arm

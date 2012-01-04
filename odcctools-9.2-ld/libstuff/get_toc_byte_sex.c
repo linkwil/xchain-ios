@@ -28,7 +28,7 @@
 #endif
 #include <mach-o/loader.h>
 #include <stuff/bytesex.h>
-#include <stuff/round.h>
+#include <stuff/rnd.h>
 
 /*
  * get_toc_byte_sex() guesses the byte sex of the table of contents of the
@@ -40,17 +40,17 @@ __private_extern__
 enum byte_sex
 get_toc_byte_sex(
 char *addr,
-unsigned long size)
+uint32_t size)
 {
      uint32_t magic;
-     unsigned long ar_name_size;
+     uint32_t ar_name_size;
      struct ar_hdr *ar_hdr;
      char *p;
 
 	ar_hdr = (struct ar_hdr *)(addr + SARMAG);
 
 	p = addr + SARMAG + sizeof(struct ar_hdr) +
-	    round(strtoul(ar_hdr->ar_size, NULL, 10), sizeof(short));
+	    rnd(strtoul(ar_hdr->ar_size, NULL, 10), sizeof(short));
 	while(p + sizeof(struct ar_hdr) + sizeof(uint32_t) < addr + size){
 	    ar_hdr = (struct ar_hdr *)p;
 	    if(strncmp(ar_hdr->ar_name, AR_EFMT1, sizeof(AR_EFMT1) - 1) == 0)
@@ -66,7 +66,7 @@ unsigned long size)
 		    magic == SWAP_INT(MH_MAGIC_64))
 		return(get_host_byte_sex() == BIG_ENDIAN_BYTE_SEX ?
 		       LITTLE_ENDIAN_BYTE_SEX : BIG_ENDIAN_BYTE_SEX);
-	    p += round(strtoul(ar_hdr->ar_size, NULL, 10), sizeof(short));
+	    p += rnd(strtoul(ar_hdr->ar_size, NULL, 10), sizeof(short));
 	}
 	return(UNKNOWN_BYTE_SEX);
 }

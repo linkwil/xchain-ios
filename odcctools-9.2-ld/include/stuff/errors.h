@@ -29,60 +29,60 @@
 #define __private_extern__ __declspec(private_extern)
 #endif
 
-#include "mach/mach.h"
+#import "mach/mach.h"
 
 /* user defined (imported) */
-extern char *progname;
+__private_extern__ char *progname;
 
 /* defined in errors.c */
 /* number of detected calls to error() */
-extern unsigned long errors;
+__private_extern__ uint32_t errors;
 
-extern void warning(
+__private_extern__ void warning(
     const char *format, ...)
 #ifdef __GNUC__
     __attribute__ ((format (printf, 1, 2)))
 #endif
     ;
-extern void error(
+__private_extern__ void error(
     const char *format, ...)
 #ifdef __GNUC__
     __attribute__ ((format (printf, 1, 2)))
 #endif
     ;
-extern void error_with_arch(
+__private_extern__ void error_with_arch(
     const char *arch_name,
     const char *format, ...)
 #ifdef __GNUC__
     __attribute__ ((format (printf, 2, 3)))
 #endif
     ;
-extern void system_error(
+__private_extern__ void system_error(
     const char *format, ...)
 #ifdef __GNUC__
     __attribute__ ((format (printf, 1, 2)))
 #endif
     ;
-extern void fatal(
+__private_extern__ void fatal(
     const char *format, ...)
 #ifdef __GNUC__
     __attribute__ ((format (printf, 1, 2)))
 #endif
     ;
-extern void system_fatal(
+__private_extern__ void system_fatal(
     const char *format, ...)
 #ifdef __GNUC__
     __attribute__ ((format (printf, 1, 2)))
 #endif
     ;
-extern void my_mach_error(
+__private_extern__ void my_mach_error(
     kern_return_t r,
     char *format, ...)
 #ifdef __GNUC__
     __attribute__ ((format (printf, 2, 3)))
 #endif
     ;
-extern void mach_fatal(
+__private_extern__ void mach_fatal(
     kern_return_t r,
     char *format, ...)
 #ifdef __GNUC__

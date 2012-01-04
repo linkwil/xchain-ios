@@ -21,20 +21,19 @@
  * @APPLE_LICENSE_HEADER_END@
  */
 #include <string.h>
-#include "stuff/target_arch.h"
 #include "stuff/ofile.h"
 
 /*
  * ofile_get_word() gets a 32 bit word for the address in the object file.
  */
 __private_extern__
-long
+int32_t
 ofile_get_word(
 uint64_t addr,
 uint32_t *word,
 void *get_word_data /* struct mach_object_file *ofile */ )
 {
-    unsigned long i, j;
+    uint32_t i, j;
     struct load_command *lc;
     struct segment_command *sg;
     struct section *s;
@@ -50,7 +49,8 @@ void *get_word_data /* struct mach_object_file *ofile */ )
 		    ((char *)sg + sizeof(struct segment_command));
 		for(j = 0 ; j < sg->nsects ; j++){
 		    if(addr >= s->addr && addr < s->addr + s->size){
-			if(s->flags == S_ZEROFILL)
+			if(s->flags == S_ZEROFILL ||
+			   s->flags == S_THREAD_LOCAL_ZEROFILL)
 			    *word = 0;
 			else {
 			    if(s->offset > ofile->object_size ||
@@ -77,7 +77,8 @@ void *get_word_data /* struct mach_object_file *ofile */ )
 		    ((char *)sg64 + sizeof(struct segment_command_64));
 		for(j = 0 ; j < sg64->nsects ; j++){
 		    if(addr >= s64->addr && addr < s64->addr + s64->size){
-			if(s64->flags == S_ZEROFILL)
+			if(s64->flags == S_ZEROFILL ||
+			   s64->flags == S_THREAD_LOCAL_ZEROFILL)
 			    *word = 0;
 			else {
 			    if(s64->offset > ofile->object_size ||

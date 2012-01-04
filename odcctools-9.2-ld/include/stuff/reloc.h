@@ -24,14 +24,14 @@
 #define __private_extern__ __declspec(private_extern)
 #endif
 
-#include <mach/machine.h>
-#include "stuff/bool.h"
+#import <mach/machine.h>
+#import "stuff/bool.h"
 
-extern unsigned long reloc_pair_r_type(
+__private_extern__ uint32_t reloc_pair_r_type(
     cpu_type_t cputype);
-extern enum bool reloc_has_pair(
+__private_extern__ enum bool reloc_has_pair(
     cpu_type_t cputype,
-    unsigned long r_type);
-extern enum bool reloc_is_sectdiff(
+    uint32_t r_type);
+__private_extern__ enum bool reloc_is_sectdiff(
     cpu_type_t cputype,
-    unsigned long r_type);
+    uint32_t r_type);

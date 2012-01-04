@@ -1,8 +1,7 @@
 #ifndef _STUFF_SYMBOL_H_
 #define _STUFF_SYMBOL_H_
 
-#include "stuff/target_arch.h"
-#include <mach-o/nlist.h>
+#include <stdint.h>
 
 struct symbol {
     char *name;

@@ -44,9 +44,9 @@ cpusubtype_findbestarch(
 cpu_type_t cputype,
 cpu_subtype_t cpusubtype,
 struct fat_arch *fat_archs,
-unsigned long nfat_archs)
+uint32_t nfat_archs)
 {
-    unsigned long i;
+    uint32_t i;
     long lowest_family, lowest_model, lowest_index;
 
 	/*
@@ -352,49 +352,6 @@ unsigned long nfat_archs)
 		}
 	    }
 	    break;
-	case CPU_TYPE_ARM:
-	    switch(cpusubtype){
-	    case CPU_SUBTYPE_ARM_ALL:
-		/*
-		 * The CPU_SUBTYPE_POWERPC_ALL is only used by the development
-		 * environment tools when building a generic ALL type binary.
-		 * In the case of a non-exact match we pick the most current
-		 * processor.
-		 */
-	    case CPU_SUBTYPE_ARM_V6:
-		for(i = 0; i < nfat_archs; i++){
-		    if(fat_archs[i].cputype != cputype)
-			continue;
-		    if((fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK) ==
-		       CPU_SUBTYPE_ARM_V6)
-			return(fat_archs + i);
-		}
-	    case CPU_SUBTYPE_ARM_V5TEJ:
-		for(i = 0; i < nfat_archs; i++){
-		    if(fat_archs[i].cputype != cputype)
-			continue;
-		    if((fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK) ==
-		       CPU_SUBTYPE_ARM_V5TEJ)
-			return(fat_archs + i);
-		}
-	    case CPU_SUBTYPE_ARM_V4T:
-		for(i = 0; i < nfat_archs; i++){
-		    if(fat_archs[i].cputype != cputype)
-			continue;
-		    if((fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK) ==
-		       CPU_SUBTYPE_ARM_V4T)
-			return(fat_archs + i);
-		}
-	    default:
-		for(i = 0; i < nfat_archs; i++){
-		    if(fat_archs[i].cputype != cputype)
-			continue;
-		    if((fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK) ==
-		       CPU_SUBTYPE_ARM_ALL)
-			return(fat_archs + i);
-		}
-	    }
-	    break;
 	case CPU_TYPE_VEO:
 	    /*
 	     * An exact match was not found.  So for the VEO subtypes if VEO1
@@ -465,6 +422,71 @@ unsigned long nfat_archs)
 		    return(fat_archs + i);
 	    }
 	    break;
+	case CPU_TYPE_ARM:
+	    /*
+	     * If it weren't for xscale, we could have a simple
+	     * heirarchy like ppc.  However, xscale has instructions
+	     * which aren't present on v5 or v6.  Here's the acceptable
+	     * fat slices for each ARM subtype, for most to least
+	     * preferred:
+	     *   v4t: v4t, ALL
+	     *   v5: v5, v4t, ALL
+	     *   xscale: xscale, v4t, ALL
+	     *   v6: v7, v6, v5, v4t, ALL
+	     *   ALL: v6, v5, xscale, v4t, ALL
+	     */
+	    if(cpusubtype == CPU_SUBTYPE_ARM_ALL ||
+	       cpusubtype == CPU_SUBTYPE_ARM_V7K){
+		for(i = 0; i < nfat_archs; i++){
+		    if(fat_archs[i].cputype == cputype &&
+		       fat_archs[i].cpusubtype == CPU_SUBTYPE_ARM_V7F)
+			return(fat_archs + i);
+		}
+	    }
+	    if(cpusubtype == CPU_SUBTYPE_ARM_ALL ||
+	       cpusubtype == CPU_SUBTYPE_ARM_V7F){
+		for(i = 0; i < nfat_archs; i++){
+		    if(fat_archs[i].cputype == cputype &&
+		       fat_archs[i].cpusubtype == CPU_SUBTYPE_ARM_V7)
+			return(fat_archs + i);
+		}
+	    }
+	    if(cpusubtype == CPU_SUBTYPE_ARM_ALL ||
+	       cpusubtype == CPU_SUBTYPE_ARM_V7 ||
+	       cpusubtype == CPU_SUBTYPE_ARM_V6){
+		for(i = 0; i < nfat_archs; i++){
+		    if(fat_archs[i].cputype == cputype &&
+		       fat_archs[i].cpusubtype == CPU_SUBTYPE_ARM_V6)
+			return(fat_archs + i);
+		}
+	    }
+	    if(cpusubtype == CPU_SUBTYPE_ARM_ALL ||
+	       cpusubtype == CPU_SUBTYPE_ARM_V6 ||
+	       cpusubtype == CPU_SUBTYPE_ARM_V5TEJ){
+		for(i = 0; i < nfat_archs; i++){
+		    if(fat_archs[i].cputype == cputype &&
+		       fat_archs[i].cpusubtype == CPU_SUBTYPE_ARM_V5TEJ)
+			return(fat_archs + i);
+		}
+	    }
+	    if(cpusubtype == CPU_SUBTYPE_ARM_ALL ||
+	       cpusubtype == CPU_SUBTYPE_ARM_XSCALE){
+		for(i = 0; i < nfat_archs; i++){
+		    if(fat_archs[i].cputype == cputype &&
+		       fat_archs[i].cpusubtype == CPU_SUBTYPE_ARM_XSCALE)
+			return(fat_archs + i);
+		}
+	    }
+	    for(i = 0; i < nfat_archs; i++){
+		if(fat_archs[i].cputype == cputype &&
+		   fat_archs[i].cpusubtype == CPU_SUBTYPE_ARM_V4T)
+		    return(fat_archs + i);
+	    }
+	    for(i = 0; i < nfat_archs; i++){
+		if(fat_archs[i].cputype == cputype &&
+		   fat_archs[i].cpusubtype == CPU_SUBTYPE_ARM_ALL)
+		    return(fat_archs + i);
+	    }
 
 	default:
 	    return(NULL);
@@ -540,28 +562,6 @@ cpu_subtype_t cpusubtype2)
 	    if((cpusubtype1 & ~CPU_SUBTYPE_MASK) == CPU_SUBTYPE_POWERPC_601 ||
 	       (cpusubtype2 & ~CPU_SUBTYPE_MASK) == CPU_SUBTYPE_POWERPC_601)
 		return(CPU_SUBTYPE_POWERPC_601);
-
-	    if((cpusubtype1 & ~CPU_SUBTYPE_MASK) >
-	       (cpusubtype2 & ~CPU_SUBTYPE_MASK))
-		return(cpusubtype1);
-	    else
-		return(cpusubtype2);
-	    break; /* logically can't get here */
-
-	case CPU_TYPE_ARM:
-	    /*
-	     * Combining with the ALL type becomes the other type. Combining
-	     * anything with the 601 becomes 601.  All other non exact matches
-	     * combine to the higher value subtype.
-	     */
-	    if((cpusubtype1 & ~CPU_SUBTYPE_MASK) == CPU_SUBTYPE_POWERPC_ALL)
-		return(cpusubtype2);
-	    if((cpusubtype2 & ~CPU_SUBTYPE_MASK) == CPU_SUBTYPE_POWERPC_ALL)
-		return(cpusubtype1);
-
-	    if((cpusubtype1 & ~CPU_SUBTYPE_MASK) == CPU_SUBTYPE_ARM_V6 ||
-	       (cpusubtype2 & ~CPU_SUBTYPE_MASK) == CPU_SUBTYPE_ARM_V6)
-		return(CPU_SUBTYPE_ARM_V6);
 
 	    if((cpusubtype1 & ~CPU_SUBTYPE_MASK) >
 	       (cpusubtype2 & ~CPU_SUBTYPE_MASK))
@@ -667,6 +667,63 @@ cpu_subtype_t cpusubtype2)
 	    if((cpusubtype2 & ~CPU_SUBTYPE_MASK) != CPU_SUBTYPE_SPARC_ALL)
 			return((cpu_subtype_t)-1);
 	    break; /* logically can't get here */
+
+	case CPU_TYPE_ARM:
+	    /*
+	     * Combinability matrix for ARM:
+	     *            V4T      V5  XSCALE      V6     V7   ALL
+	     *            ~~~      ~~  ~~~~~~      ~~     ~~   ~~~
+	     * V4T        V4T      V5  XSCALE      V6     V7   ALL
+	     * V5          V5      V5      --      V6     V7   ALL
+	     * XSCALE  XSCALE      --  XSCALE      --     --   ALL
+	     * V6          V6      V6      --      V6     V7   ALL
+	     * V7          V7      V7      --      V7     V7   ALL
+	     * ALL        ALL     ALL     ALL     ALL     ALL  ALL
+	     */
+	    if((cpusubtype1 & ~CPU_SUBTYPE_MASK) == CPU_SUBTYPE_ARM_ALL)
+		return(cpusubtype2);
+	    if((cpusubtype2 & ~CPU_SUBTYPE_MASK) == CPU_SUBTYPE_ARM_ALL)
+		return(cpusubtype1);
+	    switch((cpusubtype1 & ~CPU_SUBTYPE_MASK)){
+		case CPU_SUBTYPE_ARM_V7:
+		    switch((cpusubtype2 & ~CPU_SUBTYPE_MASK)){
+			case CPU_SUBTYPE_ARM_XSCALE:
+			    return((cpu_subtype_t)-1);
+			default:
+			    return(CPU_SUBTYPE_ARM_V7);
+		    }
+		case CPU_SUBTYPE_ARM_V6:
+		    switch((cpusubtype2 & ~CPU_SUBTYPE_MASK)){
+			case CPU_SUBTYPE_ARM_XSCALE:
+			    return((cpu_subtype_t)-1);
+			default:
+			    return(CPU_SUBTYPE_ARM_V6);
+		    }
+		case CPU_SUBTYPE_ARM_XSCALE:
+		    switch((cpusubtype2 & ~CPU_SUBTYPE_MASK)){
+			case CPU_SUBTYPE_ARM_V7:
+			case CPU_SUBTYPE_ARM_V6:
+			case CPU_SUBTYPE_ARM_V5TEJ:
+			    return((cpu_subtype_t)-1);
+			default:
+			    return(CPU_SUBTYPE_ARM_XSCALE);
+		    }
+		case CPU_SUBTYPE_ARM_V5TEJ:
+		    switch((cpusubtype2 & ~CPU_SUBTYPE_MASK)){
+			case CPU_SUBTYPE_ARM_XSCALE:
+			    return((cpu_subtype_t)-1);
+			case CPU_SUBTYPE_ARM_V7:
+			    return(CPU_SUBTYPE_ARM_V7);
+			case CPU_SUBTYPE_ARM_V6:
+			    return(CPU_SUBTYPE_ARM_V6);
+			default:
+			    return(CPU_SUBTYPE_ARM_V5TEJ);
+		    }
+		case CPU_SUBTYPE_ARM_V4T:
+		    return((cpusubtype2 & ~CPU_SUBTYPE_MASK));
+		default:
+		    return((cpu_subtype_t)-1);
+	    }
 
 	default:
 	    return((cpu_subtype_t)-1);
@@ -932,6 +989,63 @@ cpu_subtype_t exec_cpusubtype) /* can be the ALL type */
 		return(TRUE);
 	    default:
 		return(FALSE);
+	    }
+	    break; /* logically can't get here */
+
+	case CPU_TYPE_ARM:
+	    switch (host_cpusubtype){
+	    case CPU_SUBTYPE_ARM_V6:
+		switch(exec_cpusubtype){
+		case CPU_SUBTYPE_ARM_ALL:
+		case CPU_SUBTYPE_ARM_V4T:
+		case CPU_SUBTYPE_ARM_V5TEJ:
+		case CPU_SUBTYPE_ARM_V6:
+		    return(TRUE);
+		default:
+		    return(FALSE);
+		}
+		break; /* logically can't get here */
+
+	    case CPU_SUBTYPE_ARM_V5TEJ:
+		switch(exec_cpusubtype){
+		case CPU_SUBTYPE_ARM_ALL:
+		case CPU_SUBTYPE_ARM_V5TEJ:
+		case CPU_SUBTYPE_ARM_V4T:
+		    return(TRUE);
+		default:
+		    return(FALSE);
+		}
+		break; /* logically can't get here */
+
+	    case CPU_SUBTYPE_ARM_XSCALE:
+		switch(exec_cpusubtype){
+		case CPU_SUBTYPE_ARM_ALL:
+		case CPU_SUBTYPE_ARM_XSCALE:
+		case CPU_SUBTYPE_ARM_V4T:
+		    return(TRUE);
+		default:
+		    return(FALSE);
+		}
+		break; /* logically can't get here */
+
+	    case CPU_SUBTYPE_ARM_V4T:
+		switch(exec_cpusubtype){
+		case CPU_SUBTYPE_ARM_ALL:
+		case CPU_SUBTYPE_ARM_V4T:
+		    return(TRUE);
+		default:
+		    return(FALSE);
+		}
+		break; /* logically can't get here */
+
+	    default:
+	      switch (exec_cpusubtype){
+	      case CPU_SUBTYPE_ARM_ALL:
+		return(TRUE);
+	      default:
+		return(FALSE);
+	      }
+	      break; /* logically can't get here */
 	    }
 	    break; /* logically can't get here */
 

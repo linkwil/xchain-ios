@@ -21,17 +21,16 @@
  * @APPLE_LICENSE_HEADER_END@
  */
 #ifndef RLD
-#if !defined(__CYGWIN__)
-#include <stdlib.h> /* first to get rid of pre-comp warning */
+#include <libc.h> /* first to get rid of pre-comp warning */
 #include <mach/mach.h> /* first to get rid of pre-comp warning */
-#endif
 #include "stdio.h"
-#include <unistd.h>
 #include <signal.h>
 #include <sys/wait.h>
+#include <sys/file.h>
 #include "stuff/errors.h"
 #include "stuff/allocate.h"
 #include "stuff/execute.h"
+#include "mach-o/dyld.h"
 
 /*
  * execute() does an execvp using the argv passed to it.  If the parameter
@@ -42,7 +41,7 @@ __private_extern__
 int
 execute(
 char **argv,
-long verbose)
+int verbose)
 {
     char *name, **p;
     int forkpid, waitpid, termsig;
@@ -52,7 +51,7 @@ long verbose)
     union wait waitstatus;
 #endif
 
-	name = argv[0];
+    name = argv[0];
 
 	if(verbose){
 	    fprintf(stderr, "+ %s ", name);
@@ -127,6 +126,50 @@ char *str)
 }
 
 /*
+ * This routine is passed a string to be added to the list of strings for 
+ * command line arguments and is then prefixed with the path of the executable.
+ */
+__private_extern__
+void
+add_execute_list_with_prefix(
+char *str)
+{
+	add_execute_list(cmd_with_prefix(str));
+}
+
+/*
+ * This routine is passed a string of a command name and a string is returned
+ * prefixed with the path of the executable and that command name.
+ */
+__private_extern__
+char *
+cmd_with_prefix(
+char *str)
+{
+	int i;
+	char *p;
+	char *prefix, buf[MAXPATHLEN], resolved_name[PATH_MAX];
+	unsigned long bufsize;
+
+	/*
+	 * Construct the prefix to the program running.
+	 */
+	bufsize = MAXPATHLEN;
+	p = buf;
+	i = _NSGetExecutablePath(p, &bufsize);
+	if(i == -1){
+	    p = allocate(bufsize);
+	    _NSGetExecutablePath(p, &bufsize);
+	}
+	prefix = realpath(p, resolved_name);
+	p = rindex(prefix, '/');
+	if(p != NULL)
+	    p[1] = '\0';
+
+	return(makestr(prefix, str, NULL));
+}
+
+/*
  * This routine reset the list of strings of command line arguments so that
  * an new command line argument list can be built.
  */
@@ -144,7 +187,7 @@ reset_execute_list(void)
 __private_extern__
 int
 execute_list(
-long verbose)
+int verbose)
 {
 	return(execute(runlist.strings, verbose));
 }

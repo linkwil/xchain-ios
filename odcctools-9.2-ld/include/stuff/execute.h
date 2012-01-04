@@ -29,15 +29,21 @@
  * verbose is non-zero the command is printed to stderr.  A non-zero return
  * value indicates success zero indicates failure.
  */
-extern int execute(
+__private_extern__ int execute(
     char **argv,
-    long verbose);
+    int verbose);
 
-extern void add_execute_list(
+__private_extern__ void add_execute_list(
     char *str);
 
-extern void reset_execute_list(
+__private_extern__ void add_execute_list_with_prefix(
+    char *str);
+
+__private_extern__ char * cmd_with_prefix(
+    char *str);
+
+__private_extern__ void reset_execute_list(
     void);
 
-extern int execute_list(
-    long verbose);
+__private_extern__ int execute_list(
+    int verbose);

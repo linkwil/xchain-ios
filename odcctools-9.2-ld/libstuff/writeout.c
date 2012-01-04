@@ -24,28 +24,19 @@
 #include <sys/time.h>
 #include <mach/mach.h>
 #include "stuff/openstep_mach.h"
-#include <stdlib.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <stdio.h>
-#include <limits.h>
+#include <libc.h>
 #ifndef __OPENSTEP__
 #include <utime.h>
 #endif
 #include "stuff/ofile.h"
 #include "stuff/breakout.h"
 #include "stuff/allocate.h"
-#include "stuff/round.h"
+#include "stuff/rnd.h"
 #include "stuff/errors.h"
-
-#ifdef __CYGWIN__
-#define O_FSYNC O_SYNC
-#endif
 
 static void copy_new_symbol_info(
     char *p,
-    unsigned long *size,
+    uint32_t *size,
     struct dysymtab_command *dyst,
     struct dysymtab_command *old_dyst,
     struct twolevel_hints_command *hints_cmd,
@@ -55,7 +46,7 @@ static void copy_new_symbol_info(
 static void make_table_of_contents(
     struct arch *archs,
     char *output,
-    long toc_time,
+    time_t toc_time,
     enum bool sort_toc,
     enum bool commons_in_toc,
     enum bool library_warnings);
@@ -112,15 +103,15 @@ __private_extern__
 void
 writeout(
 struct arch *archs,
-unsigned long narchs,
+uint32_t narchs,
 char *output,
 unsigned short mode,
 enum bool sort_toc,
 enum bool commons_in_toc,
 enum bool library_warnings,
-unsigned long *throttle)
+uint32_t *throttle)
 {
-    unsigned long fsync;
+    uint32_t fsync;
     int fd;
 #ifndef __OPENSTEP__
     struct utimbuf timep;
@@ -129,8 +120,8 @@ unsigned long *throttle)
 #endif
     mach_port_t my_mach_host_self;
     char *file, *p;
-    unsigned long file_size;
-    long toc_time;
+    uint32_t file_size;
+    time_t toc_time;
     enum bool seen_archive;
     kern_return_t r;
    
@@ -170,7 +161,7 @@ unsigned long *throttle)
 #define WRITE_SIZE (32 * 1024)
             struct timeval start, end;
             struct timezone tz;
-            unsigned long bytes_written, bytes_per_second, write_size;
+            uint32_t bytes_written, bytes_per_second, write_size;
             double time_used, time_should_have_took, usecs_to_kill;
             static struct host_sched_info info = { 0 };
             unsigned int count;
@@ -200,7 +191,7 @@ unsigned long *throttle)
                     goto cleanup;
                 }
                 p += write_size;
-                if(p < file + file_size || *throttle == ULONG_MAX){
+                if(p < file + file_size || *throttle == UINT_MAX){
                     bytes_written += write_size;
                     (void)gettimeofday(&end, &tz);
 #ifdef THROTTLE_DEBUG
@@ -239,7 +230,7 @@ unsigned long *throttle)
                     }
                 }
             } while(p < file + file_size);
-            if(*throttle == ULONG_MAX)
+            if(*throttle == UINT_MAX)
                 *throttle = bytes_per_second;
         }
         else{
@@ -295,16 +286,16 @@ __private_extern__
 void
 writeout_to_mem(
 struct arch *archs,
-unsigned long narchs,
+uint32_t narchs,
 char *filename,
 void **outputbuf,
-unsigned long *length,
+uint32_t *length,
 enum bool sort_toc,
 enum bool commons_in_toc,
 enum bool library_warnings,
 enum bool *seen_archive)
 {
-    unsigned long i, j, k, file_size, offset, pad, size;
+    uint32_t i, j, k, file_size, offset, pad, size;
     uint32_t i32;
     enum byte_sex target_byte_sex, host_byte_sex;
     char *file, *p;
@@ -315,7 +306,8 @@ enum bool *seen_archive)
     struct twolevel_hints_command hints_cmd;
     struct load_command lc, *lcp;
     struct dylib_command dl, *dlp;
-    long toc_time, timestamp, index;
+    time_t toc_time;
+    int32_t timestamp, index;
     uint32_t ncmds;
     enum bool swapped;
 
@@ -361,7 +353,7 @@ enum bool *seen_archive)
 				       commons_in_toc, library_warnings);
 		archs[i].library_size += SARMAG + archs[i].toc_size;
 		if(archs[i].fat_arch != NULL)
-		    file_size = round(file_size, 1 << archs[i].fat_arch->align);
+		    file_size = rnd(file_size, 1 << archs[i].fat_arch->align);
 		file_size += archs[i].library_size;
 		if(archs[i].fat_arch != NULL)
 		    archs[i].fat_arch->size = archs[i].library_size;
@@ -369,16 +361,17 @@ enum bool *seen_archive)
 	    else if(archs[i].type == OFILE_Mach_O){
 		size = archs[i].object->object_size
 		       - archs[i].object->input_sym_info_size
+		       + archs[i].object->output_new_content_size
 		       + archs[i].object->output_sym_info_size;
 		if(archs[i].fat_arch != NULL)
-		    file_size = round(file_size, 1 << archs[i].fat_arch->align);
+		    file_size = rnd(file_size, 1 << archs[i].fat_arch->align);
 		file_size += size;
 		if(archs[i].fat_arch != NULL)
 		    archs[i].fat_arch->size = size;
 	    }
 	    else{ /* archs[i].type == OFILE_UNKNOWN */
 		if(archs[i].fat_arch != NULL)
-		    file_size = round(file_size, 1 << archs[i].fat_arch->align);
+		    file_size = rnd(file_size, 1 << archs[i].fat_arch->align);
 		file_size += archs[i].unknown_size;
 		if(archs[i].fat_arch != NULL)
 		    archs[i].fat_arch->size = archs[i].unknown_size;
@@ -392,7 +385,7 @@ enum bool *seen_archive)
 	if((r = vm_allocate(mach_task_self(), (vm_address_t *)&file,
 			    file_size, TRUE)) != KERN_SUCCESS)
 	    mach_fatal(r, "can't vm_allocate() buffer for output file: %s of "
-		       "size %lu", filename, file_size);
+		       "size %u", filename, file_size);
 
 	/*
 	 * If there is more than one architecture then fill in the fat file
@@ -408,7 +401,7 @@ enum bool *seen_archive)
 	    for(i = 0; i < narchs; i++){
 		fat_arch[i].cputype = archs[i].fat_arch->cputype;
 		fat_arch[i].cpusubtype = archs[i].fat_arch->cpusubtype;
-		offset = round(offset, 1 << archs[i].fat_arch->align);
+		offset = rnd(offset, 1 << archs[i].fat_arch->align);
 		fat_arch[i].offset = offset;
 		fat_arch[i].size = archs[i].fat_arch->size;
 		fat_arch[i].align = archs[i].fat_arch->align;
@@ -485,7 +478,7 @@ enum bool *seen_archive)
 		if(archs[i].toc_long_name == TRUE){
 		    memcpy(p, archs[i].toc_name, archs[i].toc_name_size);
 		    p += archs[i].toc_name_size +
-			 (round(sizeof(struct ar_hdr), 8) -
+			 (rnd(sizeof(struct ar_hdr), 8) -
 			  sizeof(struct ar_hdr));
 		}
 
@@ -523,8 +516,8 @@ enum bool *seen_archive)
 		    if(archs[i].members[j].member_long_name == TRUE){
 			memcpy(p, archs[i].members[j].member_name,
 			       archs[i].members[j].member_name_size);
-			p += round(archs[i].members[j].member_name_size, 8) +
-				   (round(sizeof(struct ar_hdr), 8) -
+			p += rnd(archs[i].members[j].member_name_size, 8) +
+				   (rnd(sizeof(struct ar_hdr), 8) -
 				    sizeof(struct ar_hdr));
 		    }
 
@@ -597,13 +590,13 @@ enum bool *seen_archive)
 				archs[i].members[j].object);
 			}
 			p += size;
-			pad = round(size, 8) - size;
+			pad = rnd(size, 8) - size;
 		    }
 		    else{
 			memcpy(p, archs[i].members[j].unknown_addr, 
 			       archs[i].members[j].unknown_size);
 			p += archs[i].members[j].unknown_size;
-			pad = round(archs[i].members[j].unknown_size, 8) -
+			pad = rnd(archs[i].members[j].unknown_size, 8) -
 				    archs[i].members[j].unknown_size;
 		    }
 		    /* as with the UNIX ar(1) program pad with '\n' chars */
@@ -705,6 +698,11 @@ enum bool *seen_archive)
 		    size = archs[i].object->object_size
 			   - archs[i].object->input_sym_info_size;
 		    memcpy(p, archs[i].object->object_addr, size);
+		    if(archs[i].object->output_new_content_size != 0){
+			memcpy(p + size, archs[i].object->output_new_content,
+			       archs[i].object->output_new_content_size);
+			size += archs[i].object->output_new_content_size;
+		    }
 		    copy_new_symbol_info(p, &size, &dyst,
 				archs[i].object->dyst, &hints_cmd,
 				archs[i].object->hints_cmd,
@@ -733,7 +731,7 @@ static
 void
 copy_new_symbol_info(
 char *p,
-unsigned long *size,
+uint32_t *size,
 struct dysymtab_command *dyst,
 struct dysymtab_command *old_dyst,
 struct twolevel_hints_command *hints_cmd,
@@ -741,6 +739,12 @@ struct twolevel_hints_command *old_hints_cmd,
 struct object *object)
 {
 	if(old_dyst != NULL){
+	    if(object->output_dyld_info_size != 0){
+		if(object->output_dyld_info != NULL)
+		    memcpy(p + *size, object->output_dyld_info,
+			   object->output_dyld_info_size);
+		*size += object->output_dyld_info_size;
+	    }
 	    memcpy(p + *size, object->output_loc_relocs,
 		   dyst->nlocrel * sizeof(struct relocation_info));
 	    *size += dyst->nlocrel *
@@ -750,6 +754,12 @@ struct object *object)
 		    memcpy(p + *size, object->output_split_info_data,
 			   object->output_split_info_data_size);
 		*size += object->output_split_info_data_size;
+	    }
+	    if(object->output_func_start_info_data_size != 0){
+		if(object->output_func_start_info_data != NULL)
+		    memcpy(p + *size, object->output_func_start_info_data,
+			   object->output_func_start_info_data_size);
+		*size += object->output_func_start_info_data_size;
 	    }
 	    if(object->mh != NULL){
 		memcpy(p + *size, object->output_symbols,
@@ -801,7 +811,7 @@ struct object *object)
 		   object->output_strings_size);
 	    *size += object->output_strings_size;
 	    if(object->output_code_sig_data_size != 0){
-		*size = round(*size, 16);
+		*size = rnd(*size, 16);
 		if(object->output_code_sig_data != NULL)
 		    memcpy(p + *size, object->output_code_sig_data,
 			   object->output_code_sig_data_size);
@@ -825,7 +835,7 @@ struct object *object)
 		   object->output_strings_size);
 	    *size += object->output_strings_size;
 	    if(object->output_code_sig_data_size != 0){
-		*size = round(*size, 16);
+		*size = rnd(*size, 16);
 		if(object->output_code_sig_data != NULL)
 		    memcpy(p + *size, object->output_code_sig_data,
 			   object->output_code_sig_data_size);
@@ -844,12 +854,12 @@ void
 make_table_of_contents(
 struct arch *arch,
 char *output,
-long toc_time,
+time_t toc_time,
 enum bool sort_toc,
 enum bool commons_in_toc,
 enum bool library_warnings)
 {
-    unsigned long i, j, k, r, s, nsects;
+    uint32_t i, j, k, r, s, nsects;
     struct member *member;
     struct object *object;
     struct load_command *lc;
@@ -857,9 +867,9 @@ enum bool library_warnings)
     struct segment_command_64 *sg64;
     struct nlist *symbols;
     struct nlist_64 *symbols64;
-    unsigned long nsymbols;
+    uint32_t nsymbols;
     char *strings;
-    unsigned long strings_size;
+    uint32_t strings_size;
     enum bool sorted;
     unsigned short toc_mode;
     int oumask, numask;
@@ -994,7 +1004,7 @@ enum bool library_warnings)
 	 */
 	arch->toc_entries = allocate(sizeof(struct toc_entry) * arch->ntocs);
 	arch->toc_ranlibs = allocate(sizeof(struct ranlib) * arch->ntocs);
-	arch->toc_strsize = round(arch->toc_strsize, 8);
+	arch->toc_strsize = rnd(arch->toc_strsize, 8);
 	arch->toc_strings = allocate(arch->toc_strsize);
 
 	/*
@@ -1097,12 +1107,10 @@ enum bool library_warnings)
 		qsort(arch->toc_entries, arch->ntocs, sizeof(struct toc_entry),
 		      (int (*)(const void *, const void *))
 		      toc_entry_index_qsort);
-		arch->toc_long_name = FALSE;
 	    }
 	}
 	else{
 	    sorted = FALSE;
-	    arch->toc_long_name = FALSE;
 	}
 
 	/*
@@ -1118,14 +1126,19 @@ enum bool library_warnings)
 	 *	the strings
 	 */
 	/*
-	 * We use a long name for the table of contents only for the sorted
-	 * case.  Which the name is SYMDEF_SORTED is "__.SYMDEF SORTED".
-	 * This code assumes SYMDEF_SORTED is 16 characters.
+	 * We use a long name for the table of contents for both the sorted
+	 * and non-sorted case because it is needed to get the 8 byte alignment
+	 * of the first archive member by padding the long name since
+	 * sizeof(struct ar_hdr) is not a mutiple of 8.
 	 */
-	if(arch->toc_long_name == TRUE){
+	if(arch->toc_long_name == FALSE)
+	    fatal("internal error: make_table_of_contents() called with "
+		  "arch->toc_long_name == FALSE");
+
+	if(sorted == TRUE){
 	    /*
 	     * This assumes that "__.SYMDEF SORTED" is 16 bytes and
-	     * (round(sizeof(struct ar_hdr), 8) - sizeof(struct ar_hdr)
+	     * (rnd(sizeof(struct ar_hdr), 8) - sizeof(struct ar_hdr)
 	     * is 4 bytes.
 	     */
 	    ar_name = AR_EFMT1 "20";
@@ -1133,16 +1146,14 @@ enum bool library_warnings)
 	    arch->toc_name = SYMDEF_SORTED;
 	}
 	else{
-	    if(sorted == TRUE){
-		ar_name = SYMDEF_SORTED;
-		arch->toc_name_size = sizeof(SYMDEF_SORTED) - 1;
-		arch->toc_name = ar_name;
-	    }
-	    else{
-		ar_name = SYMDEF;
-		arch->toc_name_size = sizeof(SYMDEF) - 1;
-		arch->toc_name = ar_name;
-	    }
+	    /*
+	     * This  assumes that "__.SYMDEF\0\0\0\0\0\0\0" is 16 bytes and
+	     * (rnd(sizeof(struct ar_hdr), 8) - sizeof(struct ar_hdr)
+	     * is 4 bytes.
+	     */
+	    ar_name = AR_EFMT1 "20";
+	    arch->toc_name_size = 16;
+	    arch->toc_name = SYMDEF "\0\0\0\0\0\0\0";
 	}
 	arch->toc_size = sizeof(struct ar_hdr) +
 			 sizeof(uint32_t) +
@@ -1151,7 +1162,7 @@ enum bool library_warnings)
 			 arch->toc_strsize;
 	if(arch->toc_long_name == TRUE)
 	    arch->toc_size += arch->toc_name_size +
-			      (round(sizeof(struct ar_hdr), 8) -
+			      (rnd(sizeof(struct ar_hdr), 8) -
 			       sizeof(struct ar_hdr));
 	for(i = 0; i < arch->nmembers; i++)
 	    arch->members[i].offset += SARMAG + arch->toc_size;
@@ -1294,7 +1305,7 @@ struct arch *arch,
 char *output,
 enum bool library_warnings)
 {
-    unsigned long i;
+    uint32_t i;
     enum bool multiple_defs;
     struct member *member;
 

@@ -26,12 +26,7 @@
 #include <string.h>
 #include <mach/mach.h>
 #include <sys/types.h>
-#if defined(__CYGWIN__)
-#define	CTL_KERN	1
-#define	KERN_OSRELEASE	 	 2	
-#else
 #include <sys/sysctl.h>
-#endif
 #include "stuff/errors.h"
 #include "stuff/allocate.h"
 #include "stuff/macosx_deployment_target.h"
@@ -69,7 +64,7 @@ void
 get_macosx_deployment_target(
 struct macosx_deployment_target *value)
 {
-    unsigned long ten, major, minor;
+    uint32_t ten, major, minor;
     char *p, *q, *endp;
     char osversion[32];
     size_t osversion_len;
@@ -120,12 +115,9 @@ use_default:
 	osversion_name[0] = CTL_KERN;
 	osversion_name[1] = KERN_OSRELEASE;
 	osversion_len = sizeof(osversion) - 1;
-#if	!defined(__CYGWIN__)
 	if(sysctl(osversion_name, 2, osversion, &osversion_len, NULL, 0) == -1)
 	    system_error("sysctl for kern.osversion failed");
-#else
-	strcpy(osversion, "9.2");
-#endif
+
 	/*
 	 * Now parse this out.  It is expected to be of the form "x.y.z" where
 	 * x, y and z are unsigned numbers.  Where x-4 is the Mac OS X major
@@ -146,7 +138,7 @@ use_default:
 	value->major = major;
 	value->minor = minor;
 	value->name = allocate(32);
-	sprintf(value->name, "10.%lu.%lu", major, minor);
+	sprintf(value->name, "10.%u.%u", major, minor);
 	goto warn_if_bad_user_values;
 
 bad_system_value:
@@ -154,10 +146,10 @@ bad_system_value:
 	 * As a last resort we set the default to the highest known shipping
 	 * system to date.
 	 */
-	value->major = 5;
+	value->major = 6;
 	value->minor = 0;
-	value->name = allocate(strlen("10.5") + 1);
-	strcpy(value->name, "10.5");
+	value->name = allocate(strlen("10.6") + 1);
+	strcpy(value->name, "10.6");
 	warning("unknown value returned by sysctl() for kern.osrelease: %s "
 		"ignored (using %s)", osversion, value->name);
 	/* fall through to also warn about a possble bad user value */

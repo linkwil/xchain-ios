@@ -20,7 +20,6 @@
  * 
  * @APPLE_LICENSE_HEADER_END@
  */
-#include "stuff/target_arch.h"
 #include <mach-o/nlist.h>
 #include <stuff/bool.h>
 
@@ -33,11 +32,11 @@ struct symbol_list {
     enum bool seen;	/* set if the symbol is seen in the input file */
 };
 
-extern void setup_symbol_list(
+__private_extern__ void setup_symbol_list(
     char *file,
     struct symbol_list **list,
-    unsigned long *size);
+    uint32_t *size);
 
-extern int symbol_list_bsearch(
+__private_extern__ int symbol_list_bsearch(
     const char *name,
     const struct symbol_list *sym);

@@ -159,7 +159,6 @@ extern vm_offset_t		interrupt_stack[];
 #define CPU_ARCH_ABI64		 0x1000000
 #define CPU_TYPE_POWERPC64	((cpu_type_t)(CPU_TYPE_POWERPC | CPU_ARCH_ABI64))
 #define CPU_TYPE_VEO		((cpu_type_t) 255)
-		
 
 /*
  *	Machine subtypes (these are defined here, instead of in a machine
@@ -302,7 +301,13 @@ extern vm_offset_t		interrupt_stack[];
 #define CPU_SUBTYPE_ARM_A500		((cpu_subtype_t) 2)
 #define CPU_SUBTYPE_ARM_A440		((cpu_subtype_t) 3)
 #define CPU_SUBTYPE_ARM_M4		((cpu_subtype_t) 4)
-#define CPU_SUBTYPE_ARM_A680		((cpu_subtype_t) 5)
+#define CPU_SUBTYPE_ARM_V4T		((cpu_subtype_t) 5)
+#define CPU_SUBTYPE_ARM_V6		((cpu_subtype_t) 6)
+#define CPU_SUBTYPE_ARM_V5TEJ		((cpu_subtype_t) 7)
+#define CPU_SUBTYPE_ARM_XSCALE		((cpu_subtype_t) 8)
+#define CPU_SUBTYPE_ARM_V7		((cpu_subtype_t) 9)
+#define CPU_SUBTYPE_ARM_V7F		((cpu_subtype_t) 10) /* Cortex A9 */
+#define CPU_SUBTYPE_ARM_V7K		((cpu_subtype_t) 12)
 
 /*
  *	MC88000 subtypes
@@ -379,12 +384,5 @@ extern vm_offset_t		interrupt_stack[];
 #define CPU_SUBTYPE_VEO_3	((cpu_subtype_t) 3)
 #define CPU_SUBTYPE_VEO_4	((cpu_subtype_t) 4)
 #define CPU_SUBTYPE_VEO_ALL	CPU_SUBTYPE_VEO_2
-
-#define CPU_SUBTYPE_ARM_V4T     ((cpu_subtype_t) 5)
-#define CPU_SUBTYPE_ARM_V6      ((cpu_subtype_t) 6)
-#define CPU_SUBTYPE_ARM_V5TEJ   ((cpu_subtype_t) 7)
-#define CPU_SUBTYPE_ARM_XSCALE  ((cpu_subtype_t) 8)
-#define CPU_SUBTYPE_ARM_ALL     ((cpu_subtype_t) 0)
-
 
 #endif	/* _MACH_MACHINE_H_ */

@@ -45,10 +45,6 @@
 #include "stuff/bytesex.h"
 #include "stuff/errors.h"
 
-#if defined(__CYGWIN__)
-typedef __uint32_t		u_int32_t;
-#endif
-
 /*
  * swap_object_headers() swaps the object file headers from the host byte sex
  * into the non-host byte sex.  It returns TRUE if it can and did swap the
@@ -94,6 +90,8 @@ struct load_command *load_commands)
     struct linkedit_data_command *ld;
     struct rpath_command *rpath;
     struct encryption_info_command *ec;
+    struct dyld_info_command *dc;
+    struct version_min_command *vc;
     uint32_t flavor, count;
     unsigned long nflavor;
     char *p, *state, *cmd_name;
@@ -225,6 +223,12 @@ struct load_command *load_commands)
 	    case LC_REEXPORT_DYLIB:
 		cmd_name = "LC_REEXPORT_DYLIB";
 		goto check_dylib_command;
+	    case LC_LOAD_UPWARD_DYLIB:
+		cmd_name = "LC_LOAD_UPWARD_DYLIB";
+		goto check_dylib_command;
+	    case LC_LAZY_LOAD_DYLIB:
+		cmd_name = "LC_LAZY_LOAD_DYLIB";
+		goto check_dylib_command;
 check_dylib_command:
 		dl = (struct dylib_command *)lc;
 		if(dl->cmdsize < sizeof(struct dylib_command)){
@@ -335,21 +339,27 @@ check_dylib_command:
 		break;
 
 	    case LC_ID_DYLINKER:
+		cmd_name = "LC_ID_DYLINKER";
+		goto check_dylinker_command;
 	    case LC_LOAD_DYLINKER:
+		cmd_name = "LC_LOAD_DYLINKER";
+		goto check_dylinker_command;
+	    case LC_DYLD_ENVIRONMENT:
+		cmd_name = "LC_DYLD_ENVIRONMENT";
+		goto check_dylinker_command;
+check_dylinker_command:
 		dyld = (struct dylinker_command *)lc;
 		if(dyld->cmdsize < sizeof(struct dylinker_command)){
 		    error("in swap_object_headers(): malformed load commands "
 			  "(%s command %lu has too small cmdsize field)",
-			  dyld->cmd == LC_ID_DYLINKER ? "LC_ID_DYLINKER" :
-			  "LC_LOAD_DYLINKER", i);
+			  cmd_name, i);
 		    return(FALSE);
 		}
 		if(dyld->name.offset >= dyld->cmdsize){
 		    error("in swap_object_headers(): truncated or malformed "
 			  "load commands (name.offset field of %s command %lu "
 			  "extends past the end of all load commands)",
-			  dyld->cmd == LC_ID_DYLINKER ? "LC_ID_DYLINKER" :
-			  "LC_LOAD_DYLINKER", i);
+			  cmd_name, i);
 		    return(FALSE);
 		}
 		break;
@@ -663,7 +673,7 @@ check_dylib_command:
 			state += sizeof(uint32_t);
 			count = *((uint32_t *)state);
 			state += sizeof(uint32_t);
-			switch(flavor){
+			switch((int)flavor){
 			case i386_THREAD_STATE:
 /* current i386 thread states */
 #if i386_THREAD_STATE == 1
@@ -914,10 +924,10 @@ check_dylib_command:
 		    nflavor = 0;
 		    p = (char *)ut + ut->cmdsize;
 		    while(state < p){
-			flavor = *((unsigned long *)state);
-			state += sizeof(unsigned long);
-			count = *((unsigned long *)state);
-			state += sizeof(unsigned long);
+			flavor = *((uint32_t *)state);
+			state += sizeof(uint32_t);
+			count = *((uint32_t *)state);
+			state += sizeof(uint32_t);
 			switch(flavor){
 			case ARM_THREAD_STATE:
 			    if(count != ARM_THREAD_STATE_COUNT){
@@ -945,7 +955,6 @@ check_dylib_command:
 		    }
 		    break;
 		}
-		    
 		error("in swap_object_headers(): malformed load commands "
 		    "(unknown cputype (%d) and cpusubtype (%d) of object and "
                     "can't byte swap %s command %lu)", cputype, 
@@ -1032,6 +1041,36 @@ check_dylib_command:
 		}
 		break;
 
+	    case LC_FUNCTION_STARTS:
+		ld = (struct linkedit_data_command *)lc;
+		if(ld->cmdsize != sizeof(struct linkedit_data_command)){
+		    error("in swap_object_headers(): malformed load commands "
+			  "(LC_FUNCTION_STARTS command %lu has incorrect "
+			  "cmdsize", i);
+		    return(FALSE);
+		}
+		break;
+
+	    case LC_VERSION_MIN_MACOSX:
+		vc = (struct version_min_command *)lc;
+		if(vc->cmdsize != sizeof(struct version_min_command)){
+		    error("in swap_object_headers(): malformed load commands "
+			  "(LC_VERSION_MIN_MACOSX command %lu has incorrect "
+			  "cmdsize", i);
+		    return(FALSE);
+		}
+		break;
+
+	    case LC_VERSION_MIN_IPHONEOS:
+		vc = (struct version_min_command *)lc;
+		if(vc->cmdsize != sizeof(struct version_min_command)){
+		    error("in swap_object_headers(): malformed load commands "
+			  "(LC_VERSION_MIN_IPHONEOS command %lu has incorrect "
+			  "cmdsize", i);
+		    return(FALSE);
+		}
+		break;
+
 	    case LC_RPATH:
 		rpath = (struct rpath_command *)lc;
 		if(rpath->cmdsize < sizeof(struct rpath_command)){
@@ -1050,10 +1089,21 @@ check_dylib_command:
 		break;
 
 	    case LC_ENCRYPTION_INFO:
-		ld = (struct encryption_info_command *)lc;
-		if(ld->cmdsize != sizeof(struct encryption_info_command)){
+		ec = (struct encryption_info_command *)lc;
+		if(ec->cmdsize != sizeof(struct encryption_info_command)){
 		    error("in swap_object_headers(): malformed load commands "
 			  "(LC_ENCRYPTION_INFO command %lu has incorrect "
+			  "cmdsize", i);
+		    return(FALSE);
+		}
+		break;
+
+	    case LC_DYLD_INFO:
+	    case LC_DYLD_INFO_ONLY:
+		dc = (struct dyld_info_command *)lc;
+		if(dc->cmdsize != sizeof(struct dyld_info_command)){
+		    error("in swap_object_headers(): malformed load commands "
+			  "(LC_DYLD_INFO command %lu has incorrect "
 			  "cmdsize", i);
 		    return(FALSE);
 		}
@@ -1131,6 +1181,8 @@ check_dylib_command:
 	    case LC_LOAD_DYLIB:
 	    case LC_LOAD_WEAK_DYLIB:
 	    case LC_REEXPORT_DYLIB:
+	    case LC_LOAD_UPWARD_DYLIB:
+	    case LC_LAZY_LOAD_DYLIB:
 		dl = (struct dylib_command *)lc;
 		swap_dylib_command(dl, target_byte_sex);
 		break;
@@ -1162,6 +1214,7 @@ check_dylib_command:
 
 	    case LC_ID_DYLINKER:
 	    case LC_LOAD_DYLINKER:
+	    case LC_DYLD_ENVIRONMENT:
 		dyld = (struct dylinker_command *)lc;
 		swap_dylinker_command(dyld, target_byte_sex);
 		break;
@@ -1337,7 +1390,7 @@ check_dylib_command:
 			count = *((uint32_t *)state);
 			*((uint32_t *)state) = SWAP_INT(count);
 			state += sizeof(uint32_t);
-			switch(flavor){
+			switch((int)flavor){
 			case i386_THREAD_STATE:
 /* current i386 thread states */
 #if i386_THREAD_STATE == 1
@@ -1460,12 +1513,12 @@ check_dylib_command:
 		    arm_thread_state_t *cpu;
 
 		    while(state < p){
-			flavor = *((unsigned long *)state);
-			*((unsigned long *)state) = SWAP_LONG(flavor);
-			state += sizeof(unsigned long);
-			count = *((unsigned long *)state);
-			*((unsigned long *)state) = SWAP_LONG(count);
-			state += sizeof(unsigned long);
+			flavor = *((uint32_t *)state);
+			*((uint32_t *)state) = SWAP_INT(flavor);
+			state += sizeof(uint32_t);
+			count = *((uint32_t *)state);
+			*((uint32_t *)state) = SWAP_INT(count);
+			state += sizeof(uint32_t);
 			switch(flavor){
 			case ARM_THREAD_STATE:
 			    cpu = (arm_thread_state_t *)state;
@@ -1510,6 +1563,7 @@ check_dylib_command:
 
 	    case LC_CODE_SIGNATURE:
 	    case LC_SEGMENT_SPLIT_INFO:
+	    case LC_FUNCTION_STARTS:
 		ld = (struct linkedit_data_command *)lc;
 		swap_linkedit_data_command(ld, target_byte_sex);
 		break;
@@ -1518,10 +1572,22 @@ check_dylib_command:
 		rpath = (struct rpath_command *)lc;
 		swap_rpath_command(rpath, target_byte_sex);
 		break;
-		
+
 	    case LC_ENCRYPTION_INFO:
 		ec = (struct encryption_info_command *)lc;
 		swap_encryption_command(ec, target_byte_sex);
+		break;
+		
+	    case LC_DYLD_INFO:
+	    case LC_DYLD_INFO_ONLY:
+		dc = (struct dyld_info_command *)lc;
+		swap_dyld_info_command(dc, target_byte_sex);
+		break;
+		
+	    case LC_VERSION_MIN_MACOSX:
+	    case LC_VERSION_MIN_IPHONEOS:
+		vc = (struct version_min_command *)lc;
+		swap_version_min_command(vc, target_byte_sex);
 		break;
 	    }
 
