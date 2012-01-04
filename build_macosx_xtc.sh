@@ -11,13 +11,6 @@
 #        .loc 1 567 0
 # The best fix for all of this is to take Apple's latest as sources and merge it with the odcc tools.
 
-# final-install-all/home/nonesuch/src/cross-mac/i686-apple-darwin9/usr/bin/i686-apple-darwin9-g++ -isysroot ~/src/cross-mac/final-install-all/home/nonesuch/src/cross-mac/i686-apple-darwin9/Developer/SDKs/MacOSX10.5.sdk -mmacosx-version-min=10.5 -DMAXOSX_DEPLOYEMENT_TARGET=10.5 ndk-stack.c -o ndk-stack.c.o
-# ld: library not found for -lstdc++
-# collect2: ld returned 1 exit status
-
-# use meld ~/src/cross-mac/final-install/home/nonesuch/src/cross-mac/i686-apple-darwin9 ~/src/cross-mac/i686-apple-darwin9
-# to see these important differences:
-
 # libstdc++ is completely ignored by all of this (c++ compilers are built though)...
 # so the final package ends up without c++ headers. Paths missing are:
 # i686-apple-darwin9/usr/include/c++/4.0.0
@@ -46,6 +39,9 @@
 # Valid values for USE_CCTOOLS are iphonedev, xchain or apple.
 # xchain is based on (and then fixed) iphonedev so seems to be the only choice.
 USE_CCTOOLS="xchain"
+MAKE_ARGS=""
+KEEP_GOING=0
+SAVE_TEMPS=0
 XCHAIN_VER=-ma
 
 # MacOSX10.4.universal.sdk may allow PPC targetting toolchains.
@@ -279,7 +275,7 @@ build_cctools_apple()
  [ -d cctools-809-build-${DARWIN_VER} ]  || cp -rf cctools-809 cctools-809-build-${DARWIN_VER}
  find cctools-809-build-${DARWIN_VER} | xargs touch
  pushd cctools-809-build-${DARWIN_VER}
- make
+ make $MAKE_ARGS
  make install
  popd
 }
@@ -325,7 +321,7 @@ build_cctools_iphonedev()
  fi
  pushd "${CCTOOLS_DIR}-build-${DARWIN_VER}"
   LDFLAGS="-m32" CFLAGS="-m32 -fpermissive" ./configure --prefix=$PREFIX/usr --target=$TARGET --with-sysroot=$PREFIX --enable-ld64
-  make
+  make $MAKE_ARGS
   make install
  popd
 }
@@ -345,7 +341,7 @@ build_cctools_xchain()
  CCTOOLS_DIR=xchain${XCHAIN_VER}-build-${DARWIN_VER}/odcctools-9.2-ld
  pushd "${CCTOOLS_DIR}"
   LDFLAGS="-m32" CFLAGS="-m32 -fpermissive" ./configure --prefix=$PREFIX/usr --target=$TARGET --with-sysroot=$PREFIX --enable-ld64
-  make
+  make $MAKE_ARGS
   make install
   # Make symlinks 'otool' and 'lipo' (as there's no Linux equivalents to cause clashes).
   pushd $PREFIX/usr/bin
@@ -482,14 +478,6 @@ build_llvm_gcc()
  popd
 }
 
-# There are some broken links after doing this:
-# ./home/nonesuch/src/cross-mac/i686-apple-darwin9/usr/lib/gcc/i686-apple-darwin9/4.2.1/include/c++/4.0.0/powerpc-apple-darwin10: No such file or directory [../../c++/4.2.1/powerpc-apple-darwin9]
-# ./home/nonesuch/src/cross-mac/i686-apple-darwin9/usr/lib/gcc/i686-apple-darwin9/4.2.1/include/c++/4.0.0/powerpc-apple-darwin8: No such file or directory
-# ./home/nonesuch/src/cross-mac/i686-apple-darwin9/usr/lib/gcc/i686-apple-darwin9/4.2.1/include/c++/4.2.1/powerpc-apple-darwin10: No such file or directory
-# ./home/nonesuch/src/cross-mac/i686-apple-darwin9/usr/lib/gcc/i686-apple-darwin9/4.2.1/include/c++/4.2.1/powerpc-apple-darwin8: No such file or directory
-# ./home/nonesuch/src/cross-mac/i686-apple-darwin9/usr/lib/gcc/i686-apple-darwin9/4.2.1/libstdc++.dylib: No such file or directory [ -> /usr/lib/libstdc++.6.dylib]
-# The powerpc ones don't matter much.
-
 if [ "$2" = "install" -o "$2" = "install-all" ] ; then
  FINAL_INSTALL=$PWD/final-$1
  PATH=$PREFIX/usr/bin:$PATH
@@ -563,20 +551,27 @@ fi
 
 prepare_osx_sdk $PREFIX
 
-# build_cctools_apple
-# build_cctools_iphonedev
-# build_cctools_xchain
+if [ "$2" = "apple" -o "$2" = "xchain" ] ; then
+ USE_CCTOOLS=$2
+fi
 
-# exit 1
+MAKE_ARGS=""
+if [ "$3" = "keep-going" ] ; then
+ KEEP_GOING=1
+ MAKE_ARGS="${MAKE_ARGS} -k "
+fi
+
+if [ "$4" = "save-temps" ] ; then
+ SAVE_TEMPS=1
+ MAKE_ARGS="${MAKE_ARGS} CFLAGS=-save-temps "
+fi
 
 if [ $USE_CCTOOLS = "iphonedev" ] ; then
  build_cctools_iphonedev
-else
- if [ $USE_CCTOOLS = "xchain" ] ; then
+elif [ $USE_CCTOOLS = "xchain" ] ; then
   build_cctools_xchain
- else
+elif [ $USE_CCTOOLS = "apple" ] ; then
   build_cctools_apple
- fi
 fi
 
 # --with-lipo doesn't do anything for build_gcc, so must add the prefix bin folder to the path
