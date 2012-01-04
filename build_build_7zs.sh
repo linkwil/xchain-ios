@@ -27,7 +27,7 @@ $(dirname $0)/build_macosx_xtc.sh ${DARWIN_VER} apple      keep-going save-temps
 $(dirname $0)/build_macosx_xtc.sh ${DARWIN_VER} xchain     keep-going save-temps > xchain-ma-build-${DARWIN_VER}.log        2>&1
 
 rm odcctools-9.2-ld-build${PKGSUFFIX}.7z
-find odcctools-9.2-ld-build-${DARWIN_VER}/.svn -exec rm -rf {} \;
+find odcctools-9.2-ld-build-${DARWIN_VER} -name ".svn" -exec rm -rf {} \;
 7za a odcctools-9.2-ld-build${PKGSUFFIX}.7z odcctools-9.2-ld-build-${DARWIN_VER} odcctools-9.2-ld-build-${DARWIN_VER}.log
 
 rm cctools-809-build${PKGSUFFIX}.7z
