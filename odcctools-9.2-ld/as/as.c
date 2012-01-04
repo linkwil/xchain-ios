@@ -46,7 +46,11 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
 #include "xmalloc.h"
 #include "layout.h"
 #include "write_object.h"
+#include "dwarf2dbg.h"
 #include "stuff/arch.h"
+
+/* ['x'] TRUE if "-x" seen. */
+enum debug_info_type debug_type = DEBUG_NONE;
 
 /* ['x'] TRUE if "-x" seen. */
 char flagseen[128] = { 0 };
@@ -77,9 +81,10 @@ struct directory_stack *include = NULL;	/* First dir to search */
 static struct directory_stack *include_tail = NULL;	/* Last in chain */
 
 /* apple_version is in apple_version.c which is created by the Makefile */
-extern char apple_version[];
+char version_string[] = "GNU assembler version 1.38";
 /* this is only used here, thus defined here (was in version.c in GAS) */
-static char version_string[] = "GNU assembler version 1.38\n";
+
+char *apple_flags = NULL;
 
 /*
  * The list of signals to catch if not ignored.
@@ -109,7 +114,7 @@ char **envp)
     char *arg;		/* an arg to program */
     char a;		/* an arg flag (after -) */
     char *out_file_name;/* name of object file, argument to -o if specified */
-    int i;
+    int i, apple_flags_size;
     struct directory_stack *dirtmp;
 
 	progname = argv[0];
@@ -128,6 +133,20 @@ char **envp)
 
 	/* This is the -dynamic flag, which is now the default */
 	flagseen[(int)'k'] = TRUE;
+
+	if(getenv("RC_DEBUG_OPTIONS") != NULL){
+	    apple_flags_size = 1;
+	    for(i = 0; i < argc; i++)
+		apple_flags_size += strlen(argv[i]) + 2;
+	    apple_flags = xmalloc(apple_flags_size);
+	    apple_flags_size = 0;
+	    for(i = 0; i < argc; i++){
+		strcpy(apple_flags + apple_flags_size, argv[i]);
+		apple_flags_size += strlen(argv[i]);
+		apple_flags[apple_flags_size++] = ' ';
+	    }
+	    apple_flags[apple_flags_size] = '\0';
+	}
 
 	/*
 	 * Parse arguments, but we are only interested in flags.
@@ -156,8 +175,10 @@ char **envp)
 		*work_argv = NULL; /* NULL means 'not a file-name' */
 		continue;
 	    }
-	    if(strcmp(arg, "--gdwarf2") == 0){
-		as_fatal("%s: I don't understand %s flag!", progname, arg);
+	    if(strcmp(arg, "--gdwarf2") == 0 || strcmp(arg, "-gdwarf-2") == 0){
+		debug_type = DEBUG_DWARF2;
+		*work_argv = NULL; /* NULL means 'not a file-name' */
+		continue;
 	    }
 
 	    /* Keep scanning args looking for flags. */
@@ -179,7 +200,7 @@ char **envp)
 		   (a != 'd') && (a != 's') && (a != 'k'))
 			as_warn("%s: Flag option -%c has already been seen!",
 				progname, a);
-		if(a != 'f' && a != 'n')
+		if(a != 'f' && a != 'n' && a != 'g')
 		    flagseen[(int)a] = TRUE;
 		switch(a){
 		case 'f':
@@ -217,9 +238,8 @@ char **envp)
 		    break;
 
 		case 'v':
-		    fprintf(stderr,"Apple Computer, Inc. version "
-			    "%s, ", apple_version);
-		    fprintf(stderr, version_string);
+		    fprintf(stderr, APPLE_INC_VERSION " %s, ", apple_version);
+		    fprintf(stderr, "%s\n", version_string);
 		    if(*arg && strcmp(arg,"ersion"))
 			as_fatal("Unknown -v option ignored");
 		    while(*arg)
@@ -258,7 +278,10 @@ char **envp)
 		    break;
 
 		case 'g':
-		    /* generate stabs for debugging assembly code */
+		    /* -g no longer means generate stabs for debugging
+		       assembly code but to generate dwarf2 for assembly code.
+		       If stabs if really wanted then --gstabs can be used. */
+		    debug_type = DEBUG_DWARF2;
 		    break;
 
 		case 'n':
@@ -683,6 +706,39 @@ char **envp)
 				archflag_cpusubtype =
 				    CPU_SUBTYPE_ARM_V6;
 			    }
+			    else if(strcmp(*work_argv,
+					   "armv7") == 0){
+				if(archflag_cpusubtype != -1 &&
+				   archflag_cpusubtype !=
+					CPU_SUBTYPE_ARM_V7)
+				    as_fatal("can't specify more "
+				       "than one -arch flag ");
+				specific_archflag = *work_argv;
+				archflag_cpusubtype =
+				    CPU_SUBTYPE_ARM_V7;
+			    }
+			    else if(strcmp(*work_argv,
+					   "armv7f") == 0){
+				if(archflag_cpusubtype != -1 &&
+				   archflag_cpusubtype !=
+					CPU_SUBTYPE_ARM_V7F)
+				    as_fatal("can't specify more "
+				       "than one -arch flag ");
+				specific_archflag = *work_argv;
+				archflag_cpusubtype =
+				    CPU_SUBTYPE_ARM_V7F;
+			    }
+			    else if(strcmp(*work_argv,
+					   "armv7k") == 0){
+				if(archflag_cpusubtype != -1 &&
+				   archflag_cpusubtype !=
+					CPU_SUBTYPE_ARM_V7K)
+				    as_fatal("can't specify more "
+				       "than one -arch flag ");
+				specific_archflag = *work_argv;
+				archflag_cpusubtype =
+				    CPU_SUBTYPE_ARM_V7K;
+			    }
 			    else
 				as_fatal("I expected 'arm' after "
 					 "-arch for this assembler.");
@@ -736,9 +792,6 @@ unknown_flag:
 	/*
 	 * Call the initialization routines.
 	 */
-#ifdef OLD_PROJECTBUILDER_INTERFACE
-	check_for_ProjectBuilder();	/* messages.c */
-#endif /* OLD_PROJECTBUILDER_INTERFACE */
 	symbol_begin();			/* symbols.c */
 	sections_begin();		/* sections.c */
 	read_begin();			/* read.c */
@@ -753,6 +806,12 @@ unknown_flag:
 	perform_an_assembly_pass(argc, argv); /* Assemble it. */
 
 	if(seen_at_least_1_file() && bad_error != TRUE){
+	    /*
+	     * If we've been collecting dwarf2 .debug_line info, either for
+	     * assembly debugging or on behalf of the compiler, emit it now.
+	     */
+	    dwarf2_finish();
+
 	    layout_addresses();
 	    write_object(out_file_name);
 	}

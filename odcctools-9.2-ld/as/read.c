@@ -17,9 +17,6 @@ You should have received a copy of the GNU General Public License
 along with GAS; see the file COPYING.  If not, write to
 the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
 
-/* iPhone binutils additions by Patrick Walton <pcwalton@uchicago.edu>. */
-/* random other iPhone additions by Jay Freeman (saurik) <saurik@saurik.com>. */
-
 #define MASK_CHAR (0xFF)	/* If your chars aren't 8 bits, you will
 				   change this a bit.  But then, GNU isnt
 				   spozed to run on your machine anyway.
@@ -40,7 +37,7 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
 #include <stdlib.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include "stuff/round.h"
+#include "stuff/rnd.h"
 #include "stuff/arch.h"
 #include "stuff/best_arch.h"
 #include "as.h"
@@ -62,10 +59,7 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
 #if defined(I386) && defined(ARCH64)
 #include "i386.h"
 #endif
-
-#ifdef HAVE_CONFIG_H
-#include <config.h>
-#endif
+#include "dwarf2dbg.h"
 
 /*
  * Parsing of input is done off of this pointer which points to the next char
@@ -175,38 +169,19 @@ static int if_depth = 0;
  * Assembler macros are implemented with these variables and functions.
  */
 #define MAX_MACRO_DEPTH 20
-
-struct macro_arg {
-    char *name;
-    char *default_value;
-};
-
-struct macro_info {
-    char *name;
-    char *contents;
-    int new_style;
-    int arg_count;
-    struct macro_arg **args;
-};
-
 static int macro_depth = 0;
 static struct hash_control
 	*ma_hash = NULL;	/* use before set up: NULL-> address error */
 static struct obstack macros;	/* obstack for macro text */
 static char *macro_name = NULL;	/* name of macro we are defining */
-static struct macro_info *macro_info;   /* info re. macro we are defining */
 static int count_lines = TRUE;	/* turns line number counting on and off */
 static int macros_on = TRUE;	/* .macros_on and .macros_off toggles this to
 				   allow macros to be turned off, which allows
 				   macros to override a machine instruction and
 				   still use it. */
-static void expand_macro(struct macro_info *info);
+static void expand_macro(char *macro_contents);
 static void macro_begin(void);
 
-/* iPhone binutils local: "repeat" command recording */
-int rept_recording = 0;
-char *rept_record_start;
-int rept_times = 0;
 
 /*
  * The .dump and .load feature is implemented with these variables and
@@ -228,10 +203,8 @@ static void pseudo_op_begin(void);
 #ifdef PPC
 static void ppcasm_pseudo_op_begin(void);
 #endif 
-static void pseudo_set(symbolS *symbolP);
-static void stab(int what);
-static char get_absolute_expression_and_terminator(long *val_pointer);
-static char *demand_copy_C_string(int *len_pointer);
+static void stab(uintptr_t what);
+static char get_absolute_expression_and_terminator(int32_t *val_pointer);
 static char *demand_copy_string(int *lenP);
 static int is_it_end_of_statement(void);
 static void equals(char *sym_name);
@@ -254,7 +227,7 @@ static void grow_bignum(void);
  * for used by the machine dependent md_assemble() to create line number stabs
  * for assembly instructions in the text section when -g is seen.
  */
-unsigned long text_nsect = 0;
+uint32_t text_nsect = 0;
 
 /*
  * These are the names of the section types used by the .section directive.
@@ -279,6 +252,10 @@ static struct type_name type_names[] = {
     { "mod_term_funcs",		  S_MOD_TERM_FUNC_POINTERS },
     { "coalesced",		  S_COALESCED },
     { "interposing",		  S_INTERPOSING },
+    { "thread_local_regular",	  S_THREAD_LOCAL_REGULAR },
+    { "thread_local_variables",	  S_THREAD_LOCAL_VARIABLES },
+    { "thread_local_init_function_pointers",
+				  S_THREAD_LOCAL_INIT_FUNCTION_POINTERS },
     { NULL, 0 }
 };
 
@@ -310,9 +287,9 @@ struct builtin_section {
     char *directive;
     char *segname;
     char *sectname;
-    unsigned long flags; /* type & attribute */
-    unsigned long default_align;
-    unsigned long sizeof_stub;
+    uint32_t flags; /* type & attribute */
+    uint32_t default_align;
+    uint32_t sizeof_stub;
 };
 static const struct builtin_section builtin_sections[] = {
     /*
@@ -385,6 +362,12 @@ static const struct builtin_section builtin_sections[] = {
     { "data",                "__DATA", "__data" },
     { "static_data",         "__DATA", "__static_data" },
     { "const_data",          "__DATA", "__const" },
+    { "tdata",		     "__DATA", "__thread_data",
+		S_THREAD_LOCAL_REGULAR },
+    { "tlv",		     "__DATA", "__thread_vars",
+		S_THREAD_LOCAL_VARIABLES },
+    { "thread_init_func",    "__DATA", "__thread_init",
+		S_THREAD_LOCAL_INIT_FUNCTION_POINTERS },
     { "objc_class",          "__OBJC", "__class", S_ATTR_NO_DEAD_STRIP },
     { "objc_meta_class",     "__OBJC", "__meta_class", S_ATTR_NO_DEAD_STRIP },
     { "objc_string_object",  "__OBJC", "__string_object", S_ATTR_NO_DEAD_STRIP},
@@ -419,56 +402,54 @@ static struct hash_control *ppcasm_po_hash = NULL;
  * The routines that implement the pseudo-ops.
  */
 #if !defined(I860) /* i860 has it's own align and org */
-static void s_balign(int value);
-static void s_align(int value);
-
-static
-void
-s_align_(
-int fill_size,
-int power_of_2_alignment);
-
-static void s_org(int value);
+static void s_align(int value, int bytes_p);
+static void s_align_bytes(uintptr_t arg);
+static void s_align_ptwo(uintptr_t arg);
+static void s_org(uintptr_t value);
 #endif
-static void s_private_extern(int value);
+static void s_private_extern(uintptr_t value);
 #if !(defined(I386) && defined(ARCH64))
-static void s_indirect_symbol(int value);
+static void s_indirect_symbol(uintptr_t value);
 #endif
-static void s_abort(int value);
-static void s_comm(int value);
-static void s_desc(int value);
-static void s_file(int value);
-static void s_fill(int value);
-static void s_lcomm(int value);
-static void s_lsym(int value);
-static void s_set(int value);
-static void s_reference(int value);
-static void s_lazy_reference(int value);
-static void s_weak_reference(int value);
-static void s_weak_definition(int value);
-static void s_no_dead_strip(int value);
-static void s_include(int value);
-static void s_dump(int value);
-static void s_load(int value);
-static void s_if(int value);
-static void s_elseif(int value);
-static void s_else(int value);
-static void s_endif(int value);
-static void s_macros_on(int value);
-static void s_macros_off(int value);
-static void s_section(int value);
-static void s_zerofill(int value);
-static unsigned long s_builtin_section(const struct builtin_section *s);
-static void s_subsections_via_symbols(int value);
-static void s_machine(int value);
-static void s_secure_log_unique(int value);
-static void s_secure_log_reset(int value);
+static void s_abort(uintptr_t value);
+static void s_comm(uintptr_t value);
+static void s_desc(uintptr_t value);
+static void s_fill(uintptr_t value);
+static void s_lcomm(uintptr_t value);
+static void s_lsym(uintptr_t value);
+static void s_set(uintptr_t value);
+static void s_reference(uintptr_t value);
+static void s_lazy_reference(uintptr_t value);
+static void s_weak_reference(uintptr_t value);
+static void s_weak_definition(uintptr_t value);
+static void s_weak_def_can_be_hidden(uintptr_t value);
+static void s_no_dead_strip(uintptr_t value);
+static void s_symbol_resolver(uintptr_t value);
+static void s_include(uintptr_t value);
+static void s_dump(uintptr_t value);
+static void s_load(uintptr_t value);
+static void s_if(uintptr_t value);
+static void s_elseif(uintptr_t value);
+static void s_else(uintptr_t value);
+static void s_endif(uintptr_t value);
+static void s_macros_on(uintptr_t value);
+static void s_macros_off(uintptr_t value);
+static void s_section(uintptr_t value);
+static void s_zerofill(uintptr_t value);
+static uint32_t s_builtin_section(const struct builtin_section *s);
+static void s_subsections_via_symbols(uintptr_t value);
+static void s_machine(uintptr_t value);
+static void s_secure_log_unique(uintptr_t value);
+static void s_secure_log_reset(uintptr_t value);
+static void s_inlineasm(uintptr_t value);
+static void s_leb128(uintptr_t sign);
+static void s_incbin(uintptr_t value);
 
 #ifdef PPC
 /*
  * The routines that implement the ppcasm pseudo-ops.
  */
-static void s_ppcasm_end(int value);
+static void s_ppcasm_end(uintptr_t value);
 #endif /* PPC */
 
 /*
@@ -476,14 +457,14 @@ static void s_ppcasm_end(int value);
  */
 static const pseudo_typeS pseudo_table[] = {
 #if !defined(I860) /* i860 has it's own align and org */
-  { "align",	s_align,	1	},
-  { "align32",	s_align,	4	},
-  { "balign",	s_balign,	1	},
-  { "balignw",	s_balign,	2	},
-  { "balignl",	s_balign,	4	},
-  { "p2align",	s_align,	1	},
-  { "p2alignw",	s_align,	2	},
-  { "p2alignl",	s_align,	4	},
+  { "align",	s_align_ptwo,	1	},
+  { "align32",	s_align_ptwo,	4	},
+  { "p2align",	s_align_ptwo,	1	},
+  { "p2alignw",	s_align_ptwo,	2	},
+  { "p2alignl",	s_align_ptwo,	4	},
+  { "balign",	s_align_bytes,	1	},
+  { "balignw",	s_align_bytes,	2	},
+  { "balignl",	s_align_bytes,  4	},
   { "org",	s_org,		0	},
 #endif
 #ifndef M88K /* m88k has it's own abs that uses the s_abs() in here */
@@ -500,26 +481,25 @@ static const pseudo_typeS pseudo_table[] = {
   { "comm",	s_comm,		0	},
   { "desc",	s_desc,		0	},
   { "double",	float_cons,	'd'	},
-  { "file",	s_file,		0	},
+  { "appfile",	s_app_file,	0	},
   { "fill",	s_fill,		0	},
   { "globl",	s_globl,	0	},
-  { "global",	s_globl,	0	},  /* iPhone binutils extension */
   { "lcomm",	s_lcomm,	0	},
   { "line",	s_line,		0	},
   { "long",	cons,		4	},
-#ifndef NeXT_MOD
-  { "word",	cons,		4	},
-#endif
   { "quad",	cons,		8	},
   { "lsym",	s_lsym,		0	},
   { "section",	s_section,	0	},
-  { "zerofill",	s_zerofill,	0	},
+  { "zerofill",	s_zerofill,	S_ZEROFILL	},
+  { "tbss",	s_zerofill,	S_THREAD_LOCAL_ZEROFILL	},
   { "secure_log_unique",s_secure_log_unique,	0	},
   { "secure_log_reset",s_secure_log_reset,	0	},
   { "set",	s_set,		0	},
   { "short",	cons,		2	},
   { "single",	float_cons,	'f'	},
   { "space",	s_space,	0	},
+  { "sleb128",	s_leb128,	1},
+  { "uleb128",	s_leb128,	0},
   { "stabd",	stab,		'd'	},
   { "stabn",	stab,		'n'	},
   { "stabs",	stab,		's'	},
@@ -528,7 +508,9 @@ static const pseudo_typeS pseudo_table[] = {
   { "lazy_reference",s_lazy_reference,	0	},
   { "weak_reference",s_weak_reference,	0	},
   { "weak_definition",s_weak_definition,	0	},
+  { "weak_def_can_be_hidden",s_weak_def_can_be_hidden,	0	},
   { "no_dead_strip",s_no_dead_strip,	0	},
+  { "symbol_resolver",s_symbol_resolver,	0	},
   { "include",	s_include,	0	},
   { "macro",	s_macro,	0	},
   { "endmacro",	s_endmacro,	0	},
@@ -543,12 +525,9 @@ static const pseudo_typeS pseudo_table[] = {
   { "load",	s_load,		0	},
   { "subsections_via_symbols",	s_subsections_via_symbols,	0	},
   { "machine",	s_machine,	0	},
-  { "rept", s_rept, 0       },
-  { "endr", s_endr, 0       },
-  { "ifc", s_ifc,   0       },
-  { "ifnc", s_ifnc,   0       },
-  { "ifdef", s_ifdef,  0    },
-  { "ifndef", s_ifdef, 1    },
+  { "inlineasmstart",	s_inlineasm,	1	},
+  { "inlineasmend",	s_inlineasm,	0	},
+  { "incbin",	s_incbin,	0	},
   { NULL }	/* end sentinel */
 };
 
@@ -580,7 +559,7 @@ void)
       obstack_begin(&notes, 5000);
 
 #ifdef M68K /* we allow big cons only on the 68k machines */
-      bignum_low = xmalloc((long)BIGNUM_BEGIN_SIZE);
+      bignum_low = xmalloc((int32_t)BIGNUM_BEGIN_SIZE);
       bignum_limit = bignum_low + BIGNUM_BEGIN_SIZE;
 #endif
 }
@@ -617,11 +596,12 @@ void)
 {
     const char *errtxt;
     const pseudo_typeS *pop;
-    unsigned long i;
+    uint32_t i;
     pseudo_typeS *sections_pseudo_table;
 
 	po_hash = hash_new();
 	errtxt = NULL;
+
 	for(pop = pseudo_table;
 	    pop->poc_name && (!errtxt || *errtxt == '\0');
 	    pop++)
@@ -638,8 +618,8 @@ void)
 	for(i = 0; builtin_sections[i].directive != NULL; i++){
 	    sections_pseudo_table[i].poc_name = builtin_sections[i].directive;
 	    sections_pseudo_table[i].poc_handler =
-					      (void (*)(int))s_builtin_section;
-	    sections_pseudo_table[i].poc_val = (int)(builtin_sections + i);
+				      (void (*)(uintptr_t))s_builtin_section;
+	    sections_pseudo_table[i].poc_val = (uintptr_t)(builtin_sections +i);
 	}
 	sections_pseudo_table[i].poc_name = NULL;
 	for(pop = (const pseudo_typeS *)sections_pseudo_table;
@@ -665,7 +645,7 @@ void)
     const char *errtxt;
     char *uppercase;
     const pseudo_typeS *pop;
-    unsigned long len, i;
+    uint32_t len, i;
 
 	ppcasm_po_hash = hash_new();
 	errtxt = NULL;
@@ -779,6 +759,12 @@ char *buffer)	/* 1st character of each buffer of lines is here. */
 			128 /* N_LSYM */,
 			0,0,0,
 			&zero_address_frag);
+	    }
+	    /*
+	     * If the --gdwarf2 flag is present generate a .file for this.
+	     */
+	    if(debug_type == DEBUG_DWARF2){
+		dwarf2_file(physical_input_file, ++dwarf2_file_number);
 	    }
 	}
 	else{
@@ -900,9 +886,10 @@ char *buffer)
 			   used only for macro expansion */
     pseudo_typeS *pop;	/* pointer to a pseudo op stucture returned by
 			   hash_find(po_hash, s+1) to determine if it is one */
-    struct macro_info *the_macro;	/* pointer to a macro name returned by
+    char *the_macro;	/* pointer to a macro name returned by
 			   hash_find(ma_hash, s) to determine if it is one */
-    int digit_value;	/* the value of a digit label as an integer, 1: == 1 */
+    int temp;		/* the value of a number label as an integer, 1: == 1 */
+    char *backup;
 
 	/* since this is a buffer of full lines it must end in a new line */
 	know(buffer_limit[-1] == '\n');
@@ -1082,7 +1069,7 @@ char *buffer)
 		 * Look for a user defined label.
 		 */
 		else if(after_name == ':'){
-		    colon(s);
+		    colon(s, 0);
 #ifdef I860
 		    /*
 		     * Intel :: feature, which makes the label global if
@@ -1126,14 +1113,6 @@ char *buffer)
 		 * one to a line.
 		 */
 		else{
-		    char *s2 = s;
-
-		    while (*s2)
-		    {
-				*s2 = tolower(*s2);
-				s2++;
-		    }
-		
 		    *input_line_pointer = after_name;
 		    while(is_end_of_line(*input_line_pointer) == 0)
 			input_line_pointer++;
@@ -1176,24 +1155,22 @@ char *buffer)
 		continue;
 	    }
 
-	    /* local label  ("4:")
-         * iPhone binutils local - allow more than 10 local labels */
-        char *ptr = input_line_pointer - 1;
-        int local_label_no = 0;
-        while (isdigit(*ptr)) {
-            local_label_no = local_label_no * 10 + ((*ptr) - '0');
-            ptr++;
-        }
-        if (*ptr == ':') {
-            input_line_pointer = ptr + 1;
-            local_colon(local_label_no);
-            continue;
-        }
-
-        as_bad("Spurious digit %d.", digit_value);
-        input_line_pointer--;
-        ignore_rest_of_line();
-		continue;
+	    /* local label  ("4:") */
+	    if(isdigit(c)){
+		backup = input_line_pointer;
+		temp = c - '0';
+		/* Read the whole number.  */
+		while(isdigit(*input_line_pointer))
+		{
+		    temp = (temp * 10) + *input_line_pointer - '0';
+		    ++input_line_pointer;
+		}
+		if(*input_line_pointer++ == ':'){
+		    local_colon(temp);
+		    continue;
+		}
+		input_line_pointer = backup;
+	    }
 
 	    /*
 	     * The only full line comment that should make it here is the first
@@ -1316,7 +1293,7 @@ char *buffer)
 		after_name = c;
 		after_name_pointer = input_line_pointer;
 		*after_name_pointer = '\0';
-		colon(s);
+		colon(s, 0);
 		*after_name_pointer = after_name;
 		/*
 		 * A colon after the name is optional and may have a spaces
@@ -1599,7 +1576,7 @@ char **buffer)
 static
 void
 s_abort(
-int value)
+uintptr_t value)
 {
     char *p;
 
@@ -1613,6 +1590,30 @@ int value)
 
 #if !defined(I860) /* i860 has it's own align and org */
 /*
+ * s_align_bytes() handles the .align pseudo-op where ".align 4" means align to
+ * a 4 byte boundary.
+ */
+static
+void
+s_align_bytes(
+uintptr_t arg)
+{
+	s_align(arg, 1);
+}
+
+/*
+ * s_align_ptwo() handles the .align pseudo-op on where ".align 4" means align
+ * to a 2**4 boundary.
+ */
+static
+void
+s_align_ptwo(
+uintptr_t arg)
+{
+	s_align(arg, 0);
+}
+
+/*
  * s_align() implements the pseudo ops
  *  .align    align_expression [ , 1byte_fill_expression [,max_bytes_to_fill]]
  *  .p2align  align_expression [ , 1byte_fill_expression [,max_bytes_to_fill]]
@@ -1622,49 +1623,37 @@ int value)
  * Where align_expression is a power of 2 alignment.
  * 
  * The parameter fill_size can only be 1, 2 or 4 which is the size of the
- * fill_expression.
+ * fill_expression.  If the parameter bytes_p is non-zero the alignment value
+ * is interpreted as the byte boundary, rather than the power of 2.
  */
-static inline int32_t ilog2(uint32_t value) {
-    return value == 0 ? -1 : 1 + ilog2(value >> 1);
-}
-
-static
-void
-s_balign(
-int fill_size)
-{
-    int power_of_2_alignment;
-
-	if(fill_size != 1 && fill_size != 2 && fill_size != 4)
-	    as_bad("Internal error, s_align() called with bad fill_size %d",
-		    fill_size);
-
-	power_of_2_alignment = get_absolute_expression();
-        power_of_2_alignment = ilog2(power_of_2_alignment);
-#define MAX_ALIGNMENT (15)
-	if(power_of_2_alignment > MAX_ALIGNMENT)
-	    as_warn("Alignment too large: %d. assumed.",
-		    power_of_2_alignment = MAX_ALIGNMENT);
-	else if(power_of_2_alignment < 0){
-	    as_warn("Alignment negative. 0 assumed.");
-	    power_of_2_alignment = 0;
-	}
-
-        s_align_(fill_size, power_of_2_alignment);
-}
-
 static
 void
 s_align(
-int fill_size)
+int fill_size,
+int bytes_p)
 {
-    int power_of_2_alignment;
+    int power_of_2_alignment, byte_alignment, i;
+    int32_t temp_fill, fill_specified, max_bytes_to_fill;
+    char fill[4];
 
 	if(fill_size != 1 && fill_size != 2 && fill_size != 4)
 	    as_bad("Internal error, s_align() called with bad fill_size %d",
 		    fill_size);
 
-	power_of_2_alignment = get_absolute_expression();
+	power_of_2_alignment = 0;
+	if(bytes_p == 0){
+	    power_of_2_alignment = get_absolute_expression();
+	}
+	else{
+	    byte_alignment = get_absolute_expression();
+	    if(byte_alignment != 0){
+		for(i = 0; (byte_alignment & 1) == 0; i++)
+		    byte_alignment >>= 1;
+		if(byte_alignment != 1)
+		    as_bad("alignment not a power of 2");
+		power_of_2_alignment = i;
+	    }
+	}
 #define MAX_ALIGNMENT (15)
 	if(power_of_2_alignment > MAX_ALIGNMENT)
 	    as_warn("Alignment too large: %d. assumed.",
@@ -1673,19 +1662,6 @@ int fill_size)
 	    as_warn("Alignment negative. 0 assumed.");
 	    power_of_2_alignment = 0;
 	}
-
-        s_align_(fill_size, power_of_2_alignment);
-}
-
-static
-void
-s_align_(
-int fill_size,
-int power_of_2_alignment)
-{
-    long temp_fill, fill_specified, max_bytes_to_fill;
-    char fill[4];
-
 	temp_fill = 0;
 	fill_specified = 0;
 	max_bytes_to_fill = 0;
@@ -1744,6 +1720,27 @@ int power_of_2_alignment)
 		fill_size = 4; /* 4 byte fill size */
 	    }
 #endif /* PPC */
+#ifdef ARM
+	    if(power_of_2_alignment >= 1){
+		extern int thumb_mode; /* from arm.c */
+		if(thumb_mode){
+	    	    if(archflag_cpusubtype == CPU_SUBTYPE_ARM_V7 ||
+	    	       archflag_cpusubtype == CPU_SUBTYPE_ARM_V7F ||
+	    	       archflag_cpusubtype == CPU_SUBTYPE_ARM_V7K){
+			temp_fill = 0xbf00; /* thumb2 nop */
+			fill_size = 2; /* 2 byte fill size */
+		    }
+		    else{
+			temp_fill = 0x46c0; /* thumb1 nop */
+			fill_size = 2; /* 2 byte fill size */
+		    }
+		}
+		else if(power_of_2_alignment >= 2){
+		    temp_fill = 0xe1a00000; /* arm nop */
+		    fill_size = 4; /* 4 byte fill size */
+		}
+	    }
+#endif /* ARM */
 	    ; /* empty statement for other architectures */
 	}
 
@@ -1762,7 +1759,7 @@ int power_of_2_alignment)
 	 */
 	if(max_bytes_to_fill == 0 &&
            frchain_now->frch_section.align <
-	   (unsigned long)power_of_2_alignment)
+	   (uint32_t)power_of_2_alignment)
 	    frchain_now->frch_section.align = power_of_2_alignment;
 
 	demand_empty_rest_of_line();
@@ -1776,7 +1773,7 @@ int power_of_2_alignment)
 static
 void
 s_comm(
-int value)
+uintptr_t value)
 {
     char *name;
     char c;
@@ -1829,7 +1826,7 @@ int value)
 	    return;
 	}
 	if(symbolP->sy_value != 0){
-	    if(symbolP->sy_value != (unsigned long)temp)
+	    if(symbolP->sy_value != (uint32_t)temp)
 		as_bad("Length of .comm \"%s\" is already " TA_DFMT ". Not "
 			"changed to " TA_DFMT ".", symbolP->sy_name,
 			symbolP->sy_value, temp);
@@ -1851,7 +1848,7 @@ int value)
 static
 void
 s_desc(
-int value)
+uintptr_t value)
 {
     char *name;
     char c;
@@ -1886,14 +1883,13 @@ int value)
 }
 
 /*
- * s_file() implements the pseudo op:
+ * s_app_file() implements the pseudo op:
  *	.file name [ level_number ]
  * the level number is generated by /lib/cpp and is just ignored.
  */
-static
 void
-s_file(
-int value)
+s_app_file(
+uintptr_t value)
 {
     char *s;
     int length;
@@ -1934,11 +1930,11 @@ int value)
 static
 void
 s_fill(
-int value)
+uintptr_t value)
 {
-    long temp_repeat;
-    long temp_size;
-    long temp_fill;
+    int32_t temp_repeat;
+    int32_t temp_size;
+    int32_t temp_fill;
     char *p;
 
 	if(get_absolute_expression_and_terminator(&temp_repeat) != ','){
@@ -1974,8 +1970,9 @@ int value)
 	else if(temp_size != 0 &&
 		temp_size != 1 &&
 		temp_size != 2 &&
-		temp_size != 4){
-	    as_bad(".fill size must be 0,1,2 or 4, .fill ignored");
+		temp_size != 4 &&
+		temp_size != 8){
+	    as_bad(".fill size must be 0,1,2,4 or 8, .fill ignored");
 	    temp_size = 0;
 	}
 	else if(temp_repeat <= 0){
@@ -2015,11 +2012,10 @@ int value)
 /*
  * s_globl() implements the pseudo op:
  *	.globl name [ , name ]
- *  As an iPhone binutils extension, '.global' is accepted too.
  */
 void
 s_globl(
-int value)
+uintptr_t value)
 {
     char *name;
     int c;
@@ -2052,7 +2048,7 @@ int value)
 static
 void
 s_private_extern(
-int value)
+uintptr_t value)
 {
     char *name;
     int c;
@@ -2087,11 +2083,11 @@ int value)
 static
 void
 s_indirect_symbol(
-int value)
+uintptr_t value)
 {
     char *name;
     int c;
-    unsigned long section_type;
+    uint32_t section_type;
 
 	if(!flagseen['k'])
 	    as_fatal("incompatible feature used: .indirect_symbol (must "
@@ -2132,7 +2128,7 @@ int value)
 static
 void
 s_lcomm(
-int value)
+uintptr_t value)
 {
     char *name;
     char c;
@@ -2186,8 +2182,8 @@ int value)
 		memset(bss->frch_root, '\0', SIZEOF_STRUCT_FRAG);
 		bss->frch_last = bss->frch_root;
 	    }
-	    bss->frch_root->fr_address = round(bss->frch_root->fr_address,
-					       1 << align);
+	    bss->frch_root->fr_address = rnd(bss->frch_root->fr_address,
+					     1 << align);
 	    symbolP->sy_value = bss->frch_root->fr_address;
 	    symbolP->sy_type  = N_SECT;
 	    symbolP->sy_other = bss->frch_nsect;
@@ -2197,7 +2193,7 @@ int value)
 	     * If this alignment is larger than any previous alignment then this
 	     * becomes the section's alignment.
 	     */
-	    if(bss->frch_section.align < (unsigned long)align)
+	    if(bss->frch_section.align < (uint32_t)align)
 		bss->frch_section.align = align;
 	}
 	else
@@ -2211,7 +2207,7 @@ int value)
  */
 void
 s_line(
-int value)
+uintptr_t value)
 {
 	/*
 	 * Assume delimiter is part of expression. BSD4.2 as fails with
@@ -2235,7 +2231,7 @@ int value)
 static
 void
 s_lsym(
-int value)
+uintptr_t value)
 {
     char *name;
     char c;
@@ -2296,11 +2292,11 @@ int value)
 static
 void
 s_org(
-int value)
+uintptr_t value)
 {
     segT segment;
     expressionS exp;
-    long temp_fill;
+    int32_t temp_fill;
     char *p;
 
 	/*
@@ -2346,7 +2342,7 @@ int value)
 static
 void
 s_set(
-int value)
+uintptr_t value)
 {
     char *name;
     char delim;
@@ -2407,7 +2403,7 @@ int value)
  */
 void
 s_abs(
-int value)
+uintptr_t value)
 {
     char *name;
     char c;
@@ -2452,10 +2448,10 @@ int value)
  */
 void
 s_space(
-int value)
+uintptr_t value)
 {
-    long temp_repeat;
-    long temp_fill;
+    int32_t temp_repeat;
+    int32_t temp_fill;
     char *p;
 
 	/* Just like .fill, but temp_size = 1 */
@@ -2483,7 +2479,7 @@ int value)
 }
 
 static
-unsigned long
+uint32_t
 s_builtin_section(
 const struct builtin_section *s)
 {
@@ -2517,20 +2513,19 @@ const struct builtin_section *s)
 static
 void
 s_section(
-int value)
+uintptr_t value)
 {
     char *segname, *sectname, *typename;
     char c, d, e, *p, *q, *r;
     struct type_name *type_name;
-    unsigned long type, attribute;
+    uint32_t type, attribute;
     section_t s;
     frchainS *frcP;
-    unsigned long sizeof_stub;
+    uint32_t sizeof_stub;
 
     struct attribute_name *attribute_name;
     char *attributename, *sizeof_stub_name, f, g, *t, *u, *endp;
 
-    SKIP_WHITESPACE();
 	segname = input_line_pointer;
 	do{
 	    c = *input_line_pointer++ ;
@@ -2579,11 +2574,6 @@ int value)
 	attribute_name = attribute_names;
 	sizeof_stub = 0;
 	if(d == ','){
-#if 0
-        printf("YES optional section type\n");
-#endif
-
-    SKIP_WHITESPACE();
 	    typename = input_line_pointer;
 	    do{
 		e = *input_line_pointer++ ;
@@ -2605,12 +2595,7 @@ int value)
 	     * Now see if the optional section attribute is present.
 	     */
 	    if(e == ','){
-#if 0
-        printf("YES optional section attribute\n");
-#endif
-
 		do{
-                    SKIP_WHITESPACE();
 		    attributename = input_line_pointer;
 		    do{
 			f = *input_line_pointer++ ;
@@ -2636,7 +2621,6 @@ int value)
 		 */
 		if(type == S_SYMBOL_STUBS){
 		    if(f == ','){
-                    SKIP_WHITESPACE();
 			sizeof_stub_name = input_line_pointer;
 			do{
 			    g = *input_line_pointer++ ;
@@ -2693,77 +2677,87 @@ int value)
 static
 void
 s_zerofill(
-int value)
+uintptr_t value)
 {
-    char *segname, *sectname, c, d, *p, *q, *name;
+    char *directive, *segname, *sectname, c, d, *p, *q, *name;
     section_t s;
     frchainS *frcP;
     symbolS *symbolP;
-    int size, align;
+    uint64_t size;
+    int align;
 
-    SKIP_WHITESPACE();
-	segname = input_line_pointer;
-	do{
-	    c = *input_line_pointer++ ;
-	}while(c != ',' && c != '\0' && c != '\n' && c != ' ' && c != '\t');
-	if(c != ','){
-	    as_bad("Expected comma after segment-name");
-	    ignore_rest_of_line();
-	    return;
+	if(value == S_THREAD_LOCAL_ZEROFILL){
+	    directive = "tbss";
+	    frcP = section_new("__DATA", "__thread_bss", value, 0, 0);
+	    if(frcP->frch_root == NULL){
+		frcP->frch_root = xmalloc(SIZEOF_STRUCT_FRAG);
+		frcP->frch_last = frcP->frch_root;
+		memset(frcP->frch_root, '\0', SIZEOF_STRUCT_FRAG);
+	    }
 	}
-	p = input_line_pointer - 1;
+	else{
+	    directive = "zerofill";
+	    segname = input_line_pointer;
+	    do{
+		c = *input_line_pointer++ ;
+	    }while(c != ' ' && c != ',' && c != '\0' && c != '\n');
+	    p = input_line_pointer - 1;
+	    while(c == ' '){
+		c = *input_line_pointer++ ;
+	    }
+	    if(c != ','){
+		as_bad("Expected comma after segment-name");
+		ignore_rest_of_line();
+		return;
+	    }
 
-	SKIP_WHITESPACE();
-	sectname = input_line_pointer;
-	do{
-	    d = *input_line_pointer++ ;
-        }while(d != ',' && d != '\0' && d != '\n' && c != ' ' && c != '\t');
-	if(p + 1 == input_line_pointer){
-	    as_bad("Expected section-name after comma");
-	    ignore_rest_of_line();
-	    return;
-	}
-	q = input_line_pointer - 1;
+	    SKIP_WHITESPACE();
+	    sectname = input_line_pointer;
+	    do{
+		d = *input_line_pointer++ ;
+	    }while(d != ',' && d != '\0' && d != '\n');
+	    if(p + 1 == input_line_pointer){
+		as_bad("Expected section-name after comma");
+		ignore_rest_of_line();
+		return;
+	    }
+	    q = input_line_pointer - 1;
 
-	*p = 0;
-	if(strlen(segname) > sizeof(s.segname)){
-	    as_bad("segment-name: %s too long (maximum %ld characters)",
-		    segname, sizeof(s.segname));
-	    ignore_rest_of_line();
-	    *p = c;
-	    return;
-	}
+	    *p = 0;
+	    if(strlen(segname) > sizeof(s.segname)){
+		as_bad("segment-name: %s too long (maximum %ld characters)",
+			segname, sizeof(s.segname));
+		ignore_rest_of_line();
+		*p = c;
+		return;
+	    }
 
-	*q = 0;
-	if(strlen(sectname) > sizeof(s.sectname)){
-	    as_bad("section-name: %s too long (maximum %ld characters)",
-		    sectname, sizeof(s.sectname));
-	    ignore_rest_of_line();
+	    *q = 0;
+	    if(strlen(sectname) > sizeof(s.sectname)){
+		as_bad("section-name: %s too long (maximum %ld characters)",
+			sectname, sizeof(s.sectname));
+		ignore_rest_of_line();
+		*p = c;
+		*q = d;
+		return;
+	    }
+
+	    frcP = section_new(segname, sectname, value, 0, 0);
+	    if(frcP->frch_root == NULL){
+		frcP->frch_root = xmalloc(SIZEOF_STRUCT_FRAG);
+		frcP->frch_last = frcP->frch_root;
+		memset(frcP->frch_root, '\0', SIZEOF_STRUCT_FRAG);
+	    }
 	    *p = c;
 	    *q = d;
-	    return;
+	    /*
+	     * If this is the end of the line all that was wanted was to create
+	     * the the section which is now done, so return.
+	     */
+	    if(d != ',')
+		return;
 	}
 
-	frcP = section_new(segname, sectname, S_ZEROFILL, 0, 0);
-	if(frcP->frch_root == NULL){
-	    frcP->frch_root = xmalloc(SIZEOF_STRUCT_FRAG);
-	    frcP->frch_last = frcP->frch_root;
-	    memset(frcP->frch_root, '\0', SIZEOF_STRUCT_FRAG);
-	}
-	*p = c;
-	*q = d;
-	/*
-	 * If this is the end of the line all that was wanted was to create the
-	 * the section which is now done, so return.
-	 */
-	if(d != ',')
-	    return;
-
-#if 0
-            printf("YES optional extra attribute\n");
-#endif
-
-	SKIP_WHITESPACE();
 	if(*input_line_pointer == '"')
 	    name = input_line_pointer + 1;
 	else
@@ -2777,20 +2771,14 @@ int value)
 	    ignore_rest_of_line();
 	    return;
 	}
-    SKIP_WHITESPACE();
 	input_line_pointer ++;
 	if((size = get_absolute_expression()) < 0){
-	    as_bad("zerofill size (%d.) <0! Ignored.", size);
+	    as_bad("%s size (%lld.) <0! Ignored.", directive, size);
 	    ignore_rest_of_line();
 	    return;
 	}
 	align = 0;
-    SKIP_WHITESPACE();
 	if(*input_line_pointer == ','){
-#if 0
-            printf("YES optional align  attribute\n");
-#endif
-
 	    input_line_pointer++;
 	    align = get_absolute_expression();
 	    if(align > MAX_ALIGNMENT){
@@ -2805,7 +2793,7 @@ int value)
 	     * If this alignment is larger than any previous alignment then this
 	     * becomes the section's alignment.
 	     */
-	    if(frcP->frch_section.align < (unsigned long)align)
+	    if(frcP->frch_section.align < (uint32_t)align)
 		frcP->frch_section.align = align;
 	}
 	*p = 0;
@@ -2813,8 +2801,8 @@ int value)
 	*p = c;
 
 	if((symbolP->sy_type & N_TYPE) == N_UNDF && symbolP->sy_value == 0){
-	    frcP->frch_root->fr_address = round(frcP->frch_root->fr_address,
-					        1 << align);
+	    frcP->frch_root->fr_address = rnd(frcP->frch_root->fr_address,
+					      1 << align);
 	    symbolP->sy_value = frcP->frch_root->fr_address;
 	    symbolP->sy_type  = N_SECT | (symbolP->sy_type & (N_EXT | N_PEXT));
 	    symbolP->sy_other = frcP->frch_nsect;
@@ -2834,7 +2822,7 @@ int value)
 static
 void
 s_reference(
-int value)
+uintptr_t value)
 {
     char *name;
     char c;
@@ -2862,7 +2850,7 @@ int value)
 static
 void
 s_lazy_reference(
-int value)
+uintptr_t value)
 {
     char *name;
     char c;
@@ -2896,7 +2884,7 @@ int value)
 static
 void
 s_weak_reference(
-int value)
+uintptr_t value)
 {
     char *name;
     char c;
@@ -2929,7 +2917,7 @@ int value)
 static
 void
 s_weak_definition(
-int value)
+uintptr_t value)
 {
     char *name;
     char c;
@@ -2945,12 +2933,35 @@ int value)
 
 	*p = 0;
 	symbolP = symbol_find_or_make(name);
-        if((symbolP->sy_type & N_TYPE) != N_UNDF &&
-	   ((symbolP->sy_type & N_TYPE) != N_SECT ||
-	   is_section_coalesced(symbolP->sy_other) == FALSE))
-	      as_fatal("symbol: %s can't be a weak_definition (currently "
-		       "only supported in section of type coalesced)", name);
 	symbolP->sy_desc |= N_WEAK_DEF;
+	*p = c;
+	demand_empty_rest_of_line();
+}
+
+/*
+ * s_weak_def_can_be_hidden() implements the pseudo op:
+ *	.weak_def_can_be_hidden name
+ */
+static
+void
+s_weak_def_can_be_hidden(
+uintptr_t value)
+{
+    char *name;
+    char c;
+    char *p;
+    symbolS *symbolP;
+
+	if(* input_line_pointer == '"')
+	    name = input_line_pointer + 1;
+	else
+	    name = input_line_pointer;
+	c = get_symbol_end();
+	p = input_line_pointer;
+
+	*p = 0;
+	symbolP = symbol_find_or_make(name);
+	symbolP->sy_desc |= (N_WEAK_DEF | N_WEAK_REF);
 	*p = c;
 	demand_empty_rest_of_line();
 }
@@ -2962,7 +2973,7 @@ int value)
 static
 void
 s_no_dead_strip(
-int value)
+uintptr_t value)
 {
     char *name;
     char c;
@@ -2984,13 +2995,41 @@ int value)
 }
 
 /*
+ * s_symbol_resolver() implements the pseudo op:
+ *	.symbol_resolver name
+ */
+static
+void
+s_symbol_resolver(
+uintptr_t value)
+{
+    char *name;
+    char c;
+    char *p;
+    symbolS *symbolP;
+
+	if(* input_line_pointer == '"')
+	    name = input_line_pointer + 1;
+	else
+	    name = input_line_pointer;
+	c = get_symbol_end();
+	p = input_line_pointer;
+
+	*p = 0;
+	symbolP = symbol_find_or_make(name);
+	symbolP->sy_desc |= N_SYMBOL_RESOLVER;
+	*p = c;
+	demand_empty_rest_of_line();
+}
+
+/*
  * s_include() implements the pseudo op:
  *	.include "filename"
  */
 static
 void
 s_include(
-int value)
+uintptr_t value)
 {
 	char *filename;
 	int length;
@@ -3036,7 +3075,8 @@ void)
 
 /* we simply ignore the rest of this statement */
 void
-s_ignore (int arg ATTRIBUTE_UNUSED)
+s_ignore(
+uintptr_t arg ATTRIBUTE_UNUSED)
 {
   totally_ignore_line ();
 }
@@ -3083,14 +3123,14 @@ void)
 static
 void
 stab(
-int what) /* d == .stabd, n == .stabn, and s == .stabs */
+uintptr_t what) /* d == .stabd, n == .stabn, and s == .stabs */
 {
     symbolS *symbolP;
     char *string;
     int saved_type;
     int length;
     int goof;	/* TRUE if we have aborted. */
-    long longint;
+    int32_t longint;
 
 	saved_type = 0;
 	symbolP = NULL;
@@ -3131,7 +3171,7 @@ int what) /* d == .stabd, n == .stabn, and s == .stabs */
 		break;
 
 	    default:
-		BAD_CASE( what );
+		BAD_CASE( (int)what );
 		break;
 	    }
 	    if(get_absolute_expression_and_terminator(&longint) == ','){
@@ -3193,7 +3233,6 @@ int what) /* d == .stabd, n == .stabn, and s == .stabs */
  *(old ->> May set need_pass_2 == TRUE. <<-- commented out by GNU below it
  * uses symbolP->sy_forward = exp.X_add_symbol;)
  */
-static
 void
 pseudo_set(
 symbolS *symbolP)
@@ -3235,22 +3274,36 @@ symbolS *symbolP)
 		    expression = xmalloc(sizeof(expressionS));
 		    *expression = exp;
 		    symbolP->expression = expression;
-
 		}
 		else{
 		    exp.X_add_number += exp.X_add_symbol->sy_value -
 					exp.X_subtract_symbol->sy_value;
 		}
 	    }
+	    else if(exp.X_add_symbol &&
+	            exp.X_subtract_symbol == NULL &&
+	            exp.X_add_symbol->expression != NULL){
+		    expressionS *expression;
+
+		    expression = xmalloc(sizeof(expressionS));
+		    memcpy(expression, exp.X_add_symbol->expression,
+			   sizeof(expressionS));
+		    symbolP->expression = expression;
+	    }
 	    else
 		as_bad("Complex expression. Absolute segment assumed." );
-	    /* fall through */
+	    symbolP->sy_type = N_ABS | ext;
+	    symbolP->sy_other = 0; /* NO_SECT */
+	    symbolP->sy_value = exp.X_add_number;
+	    symbolP->sy_frag = &zero_address_frag;
+	    break;
 
 	case SEG_ABSOLUTE:
 	    symbolP->sy_type = N_ABS | ext;
 	    symbolP->sy_other = 0; /* NO_SECT */
 	    symbolP->sy_value = exp.X_add_number;
 	    symbolP->sy_frag = &zero_address_frag;
+	    symbolP->expression = NULL;
 	    break;
 
 	case SEG_SECT:
@@ -3291,7 +3344,7 @@ symbolS *symbolP)
  */
 void
 cons(	
-int nbytes) /* nbytes == 1 for .byte, 2 for .word, 4 for .long, 8 for .quad */
+uintptr_t nbytes) /* nbytes == 1 for .byte, 2 for .word, 4 for .long, 8 for .quad */
 {
     char c;
     signed_expr_t
@@ -3302,7 +3355,11 @@ int nbytes) /* nbytes == 1 for .byte, 2 for .word, 4 for .long, 8 for .quad */
     char *p;		/* points into the frag */
     segT segment;
     expressionS exp;
+#ifndef TC_CONS_FIX_NEW
+    fixS *fixP;
+#endif
 
+	memset(&exp, '\0', sizeof(exp));
 	/*
 	 * Input_line_pointer -> 1st char after pseudo-op-code and could legally
 	 * be a end-of-line. (Or, less legally an eof - which we cope with.)
@@ -3352,9 +3409,9 @@ int nbytes) /* nbytes == 1 for .byte, 2 for .word, 4 for .long, 8 for .quad */
 		 */
 		if(exp.X_add_number > 0 &&
 		   (((LITTLENUM_NUMBER_OF_BITS * exp.X_add_number) / 8) <=
-		   sizeof(long long))){
+		   sizeof(int64_t))){
 		    int i;
-		    long long sum;
+		    int64_t sum;
 
 		    sum = 0;
 		    for(i = 0; i < exp.X_add_number; ++i)
@@ -3366,7 +3423,7 @@ int nbytes) /* nbytes == 1 for .byte, 2 for .word, 4 for .long, 8 for .quad */
 		{
 		    as_bad("%s number illegal. Absolute 0 assumed.",
 			    exp.X_add_number > 0 ? "Bignum" : "Floating-Point");
-		    md_number_to_chars(p, (long)0, nbytes);
+		    md_number_to_chars(p, (int32_t)0, nbytes);
 	        }
 		break;
 
@@ -3383,6 +3440,7 @@ int nbytes) /* nbytes == 1 for .byte, 2 for .word, 4 for .long, 8 for .quad */
 		    /* Leading bits contain both 0s & 1s. */
 		    as_bad("Value 0x%llx truncated to 0x%llx.", get, use);
 		}
+  		dwarf2_emit_insn(nbytes);
 		/* put bytes in right order. */
 		md_number_to_chars(p, use, nbytes);
 		break;
@@ -3396,7 +3454,7 @@ int nbytes) /* nbytes == 1 for .byte, 2 for .word, 4 for .long, 8 for .quad */
 		    nbytes,
 		    &exp);
 #else
-		fix_new(frag_now,
+		fixP = fix_new(frag_now,
 			p - frag_now->fr_literal,
 			nbytes,
 			exp.X_add_symbol,
@@ -3405,6 +3463,12 @@ int nbytes) /* nbytes == 1 for .byte, 2 for .word, 4 for .long, 8 for .quad */
 			0,
 			0,
 			0);
+		/*
+		 * If we have the special assembly time constant expression
+		 * of the difference of two symbols defined in the same section 
+		 * then divided by exactly 2 mark the fix to indicate this.
+		 */
+		fixP->fx_sectdiff_divide_by_two = exp.X_sectdiff_divide_by_two;
 #endif
 		break;
 
@@ -3443,11 +3507,11 @@ int nbytes) /* nbytes == 1 for .byte, 2 for .word, 4 for .long, 8 for .quad */
  */
 void
 big_cons(
-int nbytes) /* 8 == .quad, 16 == .octa ... */
+uintptr_t nbytes) /* 8 == .quad, 16 == .octa ... */
 {
     char c;	/* input_line_pointer -> c. */
     int radix;
-    long length;/* Number of chars in an object. */
+    int32_t length;/* Number of chars in an object. */
     int digit;	/* Value of 1 digit. */
     int carry;	/* For multi-precision arithmetic. */
     int work;	/* For multi-precision arithmetic. */
@@ -3515,7 +3579,7 @@ int nbytes) /* 8 == .quad, 16 == .octa ... */
 		as_bad("Most significant bits truncated in integer constant.");
 	    }
 	    else{
-		long leading_zeroes;
+		int32_t leading_zeroes;
 
 		for(leading_zeroes = nbytes - length;
 		    leading_zeroes;
@@ -3550,7 +3614,7 @@ void
 grow_bignum(
 void)
 {
-    long length;
+    int32_t length;
 
 	bignum_high++;
 	if(bignum_high >= bignum_limit)
@@ -3585,7 +3649,7 @@ void)
  */
 void
 float_cons(
-int float_type) /* 'f':.ffloat ... 'F':.float ... */
+uintptr_t float_type) /* 'f':.ffloat ... 'F':.float ... */
 {
     char *p;
     char c;
@@ -3640,6 +3704,129 @@ int float_type) /* 'f':.ffloat ... 'F':.float ... */
 	demand_empty_rest_of_line();
 }
 
+static void
+emit_leb128_expr (expressionS *exp, int sign)
+{
+  segT op = exp->X_op;
+#ifdef notyet
+  unsigned int nbytes;
+#endif
+
+  if (op == O_absent)
+    {
+      as_warn (_("zero assumed for missing expression"));
+      exp->X_add_number = 0;
+      op = O_constant;
+    }
+  else if (op == O_big && exp->X_add_number <= 0)
+    {
+      as_bad (_("floating point number invalid"));
+      exp->X_add_number = 0;
+      op = O_constant;
+    }
+#ifdef notyet
+  else if (op == O_register)
+    {
+      as_warn (_("register value used as expression"));
+      op = O_constant;
+    }
+  else if (op == O_constant
+	   && sign
+	   && (exp->X_add_number < 0) != !exp->X_unsigned)
+    {
+      /* We're outputting a signed leb128 and the sign of X_add_number
+	 doesn't reflect the sign of the original value.  Convert EXP
+	 to a correctly-extended bignum instead.  */
+      convert_to_bignum (exp);
+      op = O_big;
+    }
+
+  /* Let check_eh_frame know that data is being emitted.  nbytes == -1 is
+     a signal that this is leb128 data.  It shouldn't optimize this away.  */
+  nbytes = (unsigned int) -1;
+  if (check_eh_frame (exp, &nbytes))
+    abort ();
+
+  /* Let the backend know that subsequent data may be byte aligned.  */
+#ifdef md_cons_align
+  md_cons_align (1);
+#endif
+#endif /* notyet */
+
+  if (op == O_constant)
+    {
+      /* If we've got a constant, emit the thing directly right now.  */
+
+      valueT value = exp->X_add_number;
+      int size;
+      char *p;
+
+      size = sizeof_leb128 (value, sign);
+      p = frag_more (size);
+      output_leb128 (p, value, sign);
+    }
+#ifdef notyet
+  else if (op == O_big)
+    {
+      /* O_big is a different sort of constant.  */
+
+      int size;
+      char *p;
+
+      size = output_big_leb128 (NULL, generic_bignum, exp->X_add_number, sign);
+      p = frag_more (size);
+      output_big_leb128 (p, generic_bignum, exp->X_add_number, sign);
+    }
+#endif /* notyet */
+  else
+    {
+      /* Otherwise, we have to create a variable sized fragment and
+	 resolve things later.  */
+
+#ifdef OLD
+      frag_var (rs_leb128, sizeof_uleb128 (~(valueT) 0), 0, sign,
+		make_expr_symbol (exp), 0, (char *) NULL);
+#else
+      symbolS *sym;
+      expressionS *expression;
+  
+      sym = symbol_temp_new(exp->X_add_symbol->sy_other /* GUESS */, 0, NULL);
+      expression = xmalloc(sizeof(expressionS));
+      *expression = *exp;
+      sym->expression = expression;
+      sym->sy_frag = &zero_address_frag;
+      frag_var (rs_leb128, sizeof_leb128 ( ((valueT) (~(valueT) 0) >> 1), 0), 0, sign,
+		sym, 0, (char *) NULL);
+      frchain_now->has_rs_leb128s = TRUE;
+#endif
+
+    }
+}
+
+/* Parse the .sleb128 and .uleb128 pseudos.  */
+
+static
+void
+s_leb128(
+uintptr_t sign)
+{
+  expressionS exp;
+
+#ifdef md_flush_pending_output
+  md_flush_pending_output ();
+#endif
+
+  do
+    {
+      expression (&exp);
+      emit_leb128_expr (&exp, sign);
+    }
+  while (*input_line_pointer++ == ',');
+
+  input_line_pointer--;
+  demand_empty_rest_of_line ();
+}
+
 /*
  *			stringer()
  *
@@ -3650,7 +3837,7 @@ int float_type) /* 'f':.ffloat ... 'F':.float ... */
  */
 void
 stringer(
-int append_zero) /* 0: don't append '\0', else 1 */
+uintptr_t append_zero) /* 0: don't append '\0', else 1 */
 {
     int c;
 
@@ -3702,7 +3889,7 @@ next_char_of_string(
 void)
 {
     int c;
-    long number, i;
+    int32_t number, i;
 
 	c = *input_line_pointer++;
 	/* make sure the 0xff char is not returned as -1 */
@@ -3869,7 +4056,7 @@ void)
 static
 char			/* return terminator */
 get_absolute_expression_and_terminator(
-long *val_pointer)	/* return value of expression */
+int32_t *val_pointer)	/* return value of expression */
 {
     *val_pointer = get_absolute_expression();
     return(*input_line_pointer++);
@@ -3881,7 +4068,6 @@ long *val_pointer)	/* return value of expression */
  * Like demand_copy_string, but return NULL if the string contains any '\0's.
  * Give a warning if that happens.
  */
-static
 char *
 demand_copy_C_string(
 int *len_pointer)
@@ -3900,16 +4086,6 @@ int *len_pointer)
 	    }
 	}
 	return(s);
-}
-
-static int is_identifier_char(char c) {
-    return
-	(c >= 'a' && c <= 'z') ||
-	(c >= 'A' && c <= 'Z') ||
-	(c >= '0' && c <= '9') ||
-	(c == '_' || c == '.') ||
-        (c == '=' || c == '$') ||
-        (c == '#');
 }
 
 /*
@@ -3938,23 +4114,22 @@ int *lenP)
 	{
 	    input_line_pointer++;	/* Skip opening quote. */
 	    while((c = next_char_of_string()) >= 0){
-		obstack_1grow(&notes, c);
+		(void)(obstack_1grow(&notes, c));
 		len++;
 	    }
+	    /*
+	     * This next line is so demand_copy_C_string will return a null
+	     * termanated string.
+	     */
+	    (void)(obstack_1grow(&notes, '\0'));
+	    retval = obstack_finish(&notes);
 	}
 	else{
-	    while (is_identifier_char(*input_line_pointer)) {
-		obstack_1grow(&notes, *input_line_pointer++);
-		len++;
-	    }
+	    as_bad("Missing string");
+	    retval = NULL;
+	    ignore_rest_of_line();
 	}
-	/*
-	 * This next line is so demand_copy_C_string will return a null
-	 * termanated string.
-	 */
-	obstack_1grow(&notes, '\0');
 	*lenP = len;
-	retval = obstack_finish(&notes);
 	return(retval);
 }
 
@@ -4034,7 +4209,7 @@ char *sym_name)
 static
 void
 s_if(
-int value)
+uintptr_t value)
 {
 	if(if_depth >= MAX_IF_DEPTH)
 	    as_fatal("You can't nest if's more than %d levels deep",
@@ -4050,105 +4225,6 @@ int value)
 	}
 }
 
-/* iPhone binutils extension: .ifc assembles if the two strings are the same */
-void s_ifnc(int value)
-{
-    char *ptr1, *ptr2;
-    int len1, len2;
-
-    if (if_depth >= MAX_IF_DEPTH)
-        as_fatal("Maximum if nesting level reached");
-    last_states[if_depth++] = the_cond_state;
-    the_cond_state.the_cond = if_cond;
-
-    if (the_cond_state.ignore)
-        totally_ignore_line();
-    else {
-        ptr1 = demand_copy_string(&len1);
-        
-        SKIP_WHITESPACE();
-        if (*input_line_pointer != ',')
-            as_bad(".ifnc needs two strings separated by a comma (',')");
-        else
-            input_line_pointer++;
-        
-        ptr2 = demand_copy_string(&len2);
-
-        the_cond_state.cond_met = (len1 != len2 || strncmp(ptr1, ptr2, len1));
-        the_cond_state.ignore = !the_cond_state.cond_met;
-        demand_empty_rest_of_line();
-    }
-}
-
-/* iPhone binutils extension: .ifc assembles if the two strings are the same */
-void s_ifc(int value)
-{
-    char *ptr1, *ptr2;
-    int len1, len2;
-
-    if (if_depth >= MAX_IF_DEPTH)
-        as_fatal("Maximum if nesting level reached");
-    last_states[if_depth++] = the_cond_state;
-    the_cond_state.the_cond = if_cond;
-
-    if (the_cond_state.ignore)
-        totally_ignore_line();
-    else {
-        ptr1 = demand_copy_string(&len1);
-        
-        SKIP_WHITESPACE();
-        if (*input_line_pointer != ',')
-            as_bad(".ifc needs two strings separated by a comma (',')");
-        else
-            input_line_pointer++;
-        
-        ptr2 = demand_copy_string(&len2);
-
-        the_cond_state.cond_met = (len1 == len2 && !strncmp(ptr1, ptr2, len1));
-        the_cond_state.ignore = !the_cond_state.cond_met;
-        demand_empty_rest_of_line();
-    }
-}
-
-/* iPhone binutils extension: .ifdef assembles if the given symbol is defined. */
-void s_ifdef(int value)
-{
-    /* Points to name of symbol.  */
-    char *name;
-    /* Points to symbol.  */
-    symbolS *symbolP;
-    char c;
-
-    if (if_depth >= MAX_IF_DEPTH)
-        as_fatal("Maximum if nesting level reached");
-    last_states[if_depth++] = the_cond_state;
-    the_cond_state.the_cond = if_cond;
-
-    if (the_cond_state.ignore)
-        totally_ignore_line();
-    else {
-        /* Leading whitespace is part of operand.  */
-        SKIP_WHITESPACE ();
-        name = input_line_pointer;
-	
-        if (!is_name_beginner (*name))
-        {
-            as_bad (_("invalid identifier for \".ifdef\""));
-            ignore_rest_of_line ();
-            return;
-        }
-
-        c = get_symbol_end ();
-        symbolP = symbol_find (name);
-        *input_line_pointer = c;
-
-        the_cond_state.cond_met = (value == 0) == (symbolP != NULL && S_IS_DEFINED (symbolP));
-        the_cond_state.ignore = !the_cond_state.cond_met;
-
-        demand_empty_rest_of_line ();	
-    }
-}
-
 /*
  * s_elseif() implements the pseudo op:
  *	.elseif expression
@@ -4157,7 +4233,7 @@ void s_ifdef(int value)
 static
 void
 s_elseif(
-int value)
+uintptr_t value)
 {
     int last_ignore_state;
 
@@ -4189,7 +4265,7 @@ int value)
 static
 void
 s_else(
-int value)
+uintptr_t value)
 {
     int last_ignore_state;
 
@@ -4216,7 +4292,7 @@ int value)
 static
 void
 s_endif(
-int value)
+uintptr_t value)
 {
 	if((the_cond_state.the_cond == no_cond) || (if_depth == 0))
 	    as_fatal("Encountered a .endif that doesn't follow a .if or .else");
@@ -4248,7 +4324,7 @@ void)
 static
 void
 s_macros_on(
-int value)
+uintptr_t value)
 {
 	macros_on = TRUE;
 	demand_empty_rest_of_line();
@@ -4260,106 +4336,34 @@ int value)
  */
 void
 s_macros_off(
-int value)
+uintptr_t value)
 {
 	macros_on = FALSE;
 	demand_empty_rest_of_line();
-}
-
-int is_eol(char c)
-{
-    return (c == '\r' || c == '\n' || c == '\0');
-}
-
-int is_ignorable_ws(char c)
-{
-    return (c == ' ' || c == '\t');
 }
 
 /*
  * s_macro() implements the pseudo op:
  *	.macro macro_name
  * that defines a macro.
- *
- * iPhone binutils local: support the GAS 2.17-style macro definitions
  */
 void
 s_macro(
-int value)
+uintptr_t value)
 {
-    char *ptr;
-    int len;
-    struct macro_arg *arg;
+    int c;
+    pseudo_typeS *pop;
 
 	if(macro_name)
 	    as_bad("Can't define a macro inside another macro definition");
 	else{
-        while (is_ignorable_ws(*input_line_pointer))
-            input_line_pointer++;
-        ptr = input_line_pointer;
-        while (is_part_of_name(*input_line_pointer))
-            input_line_pointer++;
-        len = input_line_pointer - ptr;
-        macro_name = malloc(len + 1);
-        strncpy(macro_name, ptr, len);
-        macro_name[len] = '\0';
-
-        macro_info = (struct macro_info *)malloc(sizeof(struct macro_info));
-        macro_info->name = macro_name;
-        macro_info->contents = NULL;
-        macro_info->arg_count = 0;
-        macro_info->args = (struct macro_arg **)malloc(sizeof(struct macro_arg
-            *) * 32);   /* TODO: don't have a hard arg limit */
-
-        /* Grab the arguments. */
-        while (1) {
-            while (is_ignorable_ws(*input_line_pointer) || *input_line_pointer
-                == ',')
-                input_line_pointer++;
-            ptr = input_line_pointer;
-            while (is_part_of_name(*input_line_pointer) || *input_line_pointer
-                == '=')
-                input_line_pointer++;
-            len = input_line_pointer - ptr;
-
-            if (len <= 0)
-                break;
-
-            arg = (struct macro_arg *)malloc(sizeof(struct macro_arg));
-            arg->name = malloc(len + 1);
-            strncpy(arg->name, ptr, len);
-            arg->name[len] = '\0';
-            arg->default_value = arg->name;
-            strsep(&(arg->default_value), "=");
-
-            if (!(arg->default_value))
-                arg->default_value = "";
-
-            macro_info->args[(macro_info->arg_count)++] = arg;
-        }
-
-        macro_info->new_style = macro_info->arg_count > 0;
-
-#if 0
-        printf("macro %s:\n", macro_info->name);
-        int i;
-        for (i = 0; i < macro_info->arg_count; i++)
-            printf("arg %d: name %s, default %s\n", i,
-                macro_info->args[i]->name, macro_info->args[i]->default_value);
-#endif
-
-#if 0
-    int c;
-    pseudo_typeS *pop;
-
-        *input_line_pointer++;
-
+	    SKIP_WHITESPACE();
 	    while(is_part_of_name(c = *input_line_pointer ++))
-		obstack_1grow (&macros, c);
-	    obstack_1grow(&macros, '\0');
+		(void)(obstack_1grow (&macros, c));
+	    (void)(obstack_1grow(&macros, '\0'));
 	    --input_line_pointer;
 	    macro_name = obstack_finish(&macros);
-	    if(macro_name == "")
+	    if(macro_name == NULL)
 		as_bad("Missing name of macro");
 	    if(*macro_name == '.'){
 		pop = (pseudo_typeS *)hash_find(po_hash, macro_name + 1);
@@ -4367,9 +4371,7 @@ int value)
 		    as_bad("Pseudo-op name: %s can't be a macro name",
 			    macro_name);
 	    }
-#endif
 	}
-
 	totally_ignore_line();
 }
 
@@ -4380,7 +4382,7 @@ int value)
  */
 void
 s_endmacro(
-int value)
+uintptr_t value)
 {
     const char *errorString;
 
@@ -4389,81 +4391,14 @@ int value)
 	    ignore_rest_of_line();
 	}
 	else{
-	    obstack_1grow(&macros, '\0');
-        
-        macro_info->contents = obstack_finish(&macros);
-
-	    errorString = hash_insert(ma_hash, macro_name, macro_info);
+	    (void)(obstack_1grow(&macros, '\0'));
+	    errorString = hash_insert(ma_hash, macro_name,
+				      obstack_finish(&macros));
 	    if(errorString != NULL && *errorString)
-		as_bad("The macro named \"%s\" is already defined",
+		as_warn("The macro named \"%s\" is already defined",
 			macro_name);
 	    macro_name = NULL;
 	}
-}
-
-void s_rept(int value)
-{
-    if (rept_recording)
-        as_bad("Nested repetition ('.rept') isn't allowed");
-    else {
-        rept_times = strtol(input_line_pointer, &input_line_pointer, 10);
-
-        rept_recording = 1;
-        rept_record_start = input_line_pointer;
-    }
-
-    totally_ignore_line(); 
-}
-
-void s_endr(int value)
-{
-    char *buffer, *last_buffer_limit, *last_input_line_pointer, *new_buf, *ptr;
-    int i, last_count_lines, len;
-
-    if (!rept_recording) {
-        as_bad("'.endr' found, but I wasn't instructed to repeat anything");
-        return;
-    }
-
-    ptr = input_line_pointer;
-    while (*ptr != '.')
-        ptr--;          /* back up to before this op so it isn't parsed */
-    ptr--;
-
-    len = ptr - rept_record_start;
-    new_buf = malloc(len + 2);
-    strncpy(new_buf, rept_record_start, len);
-    new_buf[len] = '\n';
-    new_buf[len+1] = '\0';
-
-#if 0
-    printf("new buf is: %s\n", new_buf);
-#endif
-
-	last_buffer_limit = buffer_limit;
-	last_count_lines = count_lines;
-	last_input_line_pointer = input_line_pointer;
-
-    /* Note: we start at 1 because one instance will have already been
-     * assembled at this point. */
-    for (i = 1; i < rept_times; i++) {
-        buffer_limit = new_buf + len + 1;
-        buffer = new_buf;
-        count_lines = FALSE;
-
-    #ifdef PPC
-        if(flagseen[(int)'p'] == TRUE)
-            ppcasm_parse_a_buffer(buffer);
-        else
-    #endif /* PPC */
-            parse_a_buffer(buffer);
-    }
-
-	buffer_limit = last_buffer_limit;
-	count_lines = last_count_lines;
-	input_line_pointer = last_input_line_pointer;
-
-    rept_recording = 0;
 }
 
 /*
@@ -4491,7 +4426,7 @@ char *char_pointer)
 	do{
 	    c = *char_pointer ++;
 	    know(c != '\0');
-	    obstack_1grow(&macros, c);
+	    (void)(obstack_1grow(&macros, c));
 	}while((c != ':') && !(is_end_of_line(c)));
 	if(char_pointer > input_line_pointer)
 	    input_line_pointer = char_pointer;
@@ -4499,26 +4434,19 @@ char *char_pointer)
 
 /*
  * expand_macro() is called to expand macros.
- *
- * iPhone binutils local: lots of additions to deal with GAS 2.17-style macros. 
  */
 static
 void
 expand_macro(
-struct macro_info *info)
+char *macro_contents)
 {
-    char *macro_contents;
     char *buffer;
-    char *ptr, *arg_buf, *arg_val_ptr;
     char c;
     int index, nargs;
     char *last_buffer_limit;
     int last_count_lines;
-    int named_invocation, len, i, which_arg;
     char *last_input_line_pointer;
     char *arguments [10]; /* at most 10 arguments, each is substituted */
-
-    macro_contents = info->contents;
 
 	if(macro_depth >= MAX_MACRO_DEPTH)
 	   as_fatal("You can't nest macros more than %d levels deep",
@@ -4527,198 +4455,80 @@ struct macro_info *info)
 
 	/* copy each argument to a object in the macro obstack */
 	nargs = 0;
-
-    memset(arguments, '\0', sizeof(char *) * 10);
-
-    /* iPhone binutils new: parse new-style arguments */
-    if (info->new_style) {
-        /* First, determine if it's a named-argument style invocation or a
-         * normal invocation. The presence of '=' should be good enough to
-         * determine which it is. */
-        named_invocation = 0;
-        ptr = input_line_pointer;
-        while (is_identifier_char(*ptr)) {
-            if (*ptr == '=') {
-                named_invocation = 1;
-                break;
-            }
-            ptr++;
-        }
-
-        index = 0;
-
-	SKIP_WHITESPACE();
-
-        /* Ok, now parse each argument. */
-        while (1) {
-            int length;
-            char *value = demand_copy_string(&length);
-
-            if (named_invocation) {
-                if (*input_line_pointer++ != '=') {
-                    as_bad("In a named-argument-style macro invocation, "
-                        "all of the arguments must be specified in the "
-                        "named-argument style, but one or more weren't");
-                    break;
-                }
-
-                /* We've parsed it fine, now just find which argument the
-                 * user meant. */
-                which_arg = -1;
-                for (i = 0; i < info->arg_count; i++) {
-                    if (!strcmp(value, info->args[i]->name)) {
-                        which_arg = i;
-                        break;
-                    }
-                }
-
-                if (which_arg == -1) {
-                    as_bad("'%s' doesn't name an argument of the macro "
-                        "'%s'", arg_buf, info->name);
-                    break;
-                }
-
-                arguments[which_arg] = demand_copy_string(&length); 
-            } else {
-                /* If not a named invocation, it's simple. */
-                arguments[index++] = value; 
-            }
-
-            if (*input_line_pointer == ',') {
-                ++input_line_pointer;
-                SKIP_WHITESPACE();
-                continue;
-            } else if (
-                !is_end_of_line(*input_line_pointer) &&
-                !is_ignorable_ws(*input_line_pointer)
-            ) {
-                as_bad("invalid macro expansion argument character (%c)", *input_line_pointer);
-            }
-
-            SKIP_WHITESPACE();
-
-            if (is_end_of_line(*input_line_pointer))
-                break;
-        }
-
-        nargs = info->arg_count;
-
-        /* Fill in blank args with default values. */
-        for (i = 0; i < nargs; i++)
-            if (arguments[i] == NULL || arguments[i][0] == '\0')
-                arguments[i] = info->args[i]->default_value;
-    } else {
-        /* Fall back to the old-style arguments - note that it doesn't matter
-         * which we use for a zero-argument macro. */ 
-        for(index = 0; index < 10; index ++){
-            if(*input_line_pointer == ' ')
-            ++input_line_pointer;
-            know(*input_line_pointer != ' ');
-            c = *input_line_pointer;
-            if(is_end_of_line(c))
-            arguments[index] = NULL;
-            else{
-            int parenthesis_depth = 0;
-            do{
-                c = *input_line_pointer++;
-                if(parenthesis_depth){
-                if(c == ')')
-                    parenthesis_depth --;
-                }
-                else{
-                if(c == '(')
-                    parenthesis_depth ++;
-                else
-                    if(is_end_of_line(c) ||
-                       (c == ' ') || (c == ','))
-                    break;
-                }
-                know(c != '\0');
-                if(is_end_of_line(c))
-                as_bad("mismatched parenthesis");
-                obstack_1grow(&macros, c);
-            }while(1);
-            obstack_1grow(&macros, '\0');
-            arguments[index] = obstack_finish(&macros);
-            nargs++;
-            if(is_end_of_line(c))
-                --input_line_pointer;
-            else if(c == ' ')
-                if(*input_line_pointer == ',')
-                input_line_pointer++;
-            }
-        }
-        if(!is_end_of_line(c)){
-            as_bad("More than 10 arguments not allowed for macros");
-            ignore_rest_of_line();
-        }
-    }
+	for(index = 0; index < 10; index ++){
+	    if(*input_line_pointer == ' ')
+		++input_line_pointer;
+	    know(*input_line_pointer != ' ');
+	    c = *input_line_pointer;
+	    if(is_end_of_line(c))
+		arguments[index] = NULL;
+	    else{
+		int parenthesis_depth = 0;
+		do{
+		    SKIP_WHITESPACE();
+		    c = *input_line_pointer++;
+		    if(parenthesis_depth){
+			if(c == ')')
+			    parenthesis_depth --;
+		    }
+		    else{
+			if(c == '(')
+			    parenthesis_depth ++;
+			else
+			    if(is_end_of_line(c) ||
+			       (c == ' ') || (c == ','))
+			    break;
+		    }
+		    know(c != '\0');
+		    if(is_end_of_line(c))
+			as_bad("mismatched parenthesis");
+		    (void)(obstack_1grow(&macros, c));
+		}while(1);
+		(void)(obstack_1grow(&macros, '\0'));
+		arguments[index] = obstack_finish(&macros);
+		nargs++;
+		if(is_end_of_line(c))
+		    --input_line_pointer;
+		else if(c == ' ')
+		    if(*input_line_pointer == ',')
+			input_line_pointer++;
+	    }
+	}
+	if(!is_end_of_line(c)){
+	    as_bad("More than 10 arguments not allowed for macros");
+	    ignore_rest_of_line();
+	}
 	/*
 	 * Build a buffer containing the macro contents with arguments
 	 * substituted
 	 */
-	obstack_1grow(&macros, '\n');
-
-        while((c = *macro_contents++)){
-            if (c == '\\') {
-                if (*macro_contents == '\\')
-                    macro_contents++;
-                else {
-                    ptr = macro_contents;
-                    while (is_part_of_name(*ptr))
-                        ptr++;
-
-                    index = -1;
-                    for (i = 0; i < info->arg_count; i++) {
-                        if (!strncmp(macro_contents, info->args[i]->name,
-                            ptr - macro_contents)) {
-                            index = i;
-                            break;
-                        }
-                    }
-
-                    macro_contents = ptr;
-
-                    if (index == -1)
-                        as_bad("Undeclared macro argument");
-                    else {
-                        last_input_line_pointer = macro_contents;
-                        macro_contents = arguments[index];
-                        if (macro_contents) {
-                            while ((c = *(macro_contents++)))
-                                obstack_1grow(&macros, c);
-                        }
-                        macro_contents = last_input_line_pointer;
-                        continue;
-                    }
-                }
-            }
-            else if(c == '$'){
-                if(*macro_contents == '$'){
-                    macro_contents++;
-                }
-                else if((*macro_contents >= '0') && (*macro_contents <= '9')){
-                    index = *macro_contents++ - '0';
-                    last_input_line_pointer = macro_contents;
-                    macro_contents = arguments[index];
-                    if(macro_contents){
-                    while ((c = * macro_contents ++))
-                    obstack_1grow (&macros, c);
-                    }
-                    macro_contents = last_input_line_pointer;
-                    continue;
-                }
-                else if (*macro_contents == 'n'){
-                    macro_contents++ ;
-                    obstack_1grow(&macros, nargs + '0');
-                    continue;
-                }
-            }
-            obstack_1grow (&macros, c);
-        }
-
-	obstack_1grow (&macros, '\n');
-	obstack_1grow (&macros, '\0');
+	(void)(obstack_1grow(&macros, '\n'));
+	while((c = *macro_contents++)){
+	    if(c == '$'){
+		if(*macro_contents == '$'){
+		    macro_contents++;
+		}
+		else if((*macro_contents >= '0') && (*macro_contents <= '9')){
+		    index = *macro_contents++ - '0';
+		    last_input_line_pointer = macro_contents;
+		    macro_contents = arguments[index];
+		    if(macro_contents){
+			while ((c = * macro_contents ++))
+			(void)(obstack_1grow (&macros, c));
+		    }
+		    macro_contents = last_input_line_pointer;
+		    continue;
+		}
+		else if (*macro_contents == 'n'){
+		    macro_contents++ ;
+		    (void)(obstack_1grow(&macros, nargs + '0'));
+		    continue;
+		}
+	    }
+	    (void)(obstack_1grow (&macros, c));
+	}
+	(void)(obstack_1grow (&macros, '\n'));
+	(void)(obstack_1grow (&macros, '\0'));
 	last_buffer_limit = buffer_limit;
 	last_count_lines = count_lines;
 	last_input_line_pointer = input_line_pointer;
@@ -4735,13 +4545,9 @@ struct macro_info *info)
 #endif /* PPC */
 	    parse_a_buffer(buffer + 1);
 	obstack_free (&macros, buffer);
-
-    if (!(info->new_style)) {
-        for(index = 9; index >= 0; index --)
-            if(arguments[index])
-            obstack_free(&macros, arguments[index]);
-    }
-
+	for(index = 9; index >= 0; index --)
+	    if(arguments[index])
+		obstack_free(&macros, arguments[index]);
 	buffer_limit = last_buffer_limit;
 	count_lines = last_count_lines;
 	input_line_pointer = last_input_line_pointer;
@@ -4756,7 +4562,7 @@ struct macro_info *info)
 static
 void
 s_dump(
-int value)
+uintptr_t value)
 {
     char *filename;
     int length;
@@ -4824,7 +4630,7 @@ PTR value)
 static
 void
 s_load(
-int value)
+uintptr_t value)
 {
     char *char_pointer;
     char *filename;
@@ -4840,14 +4646,14 @@ int value)
 		do{
 		    do{
 			the_char = getc_unlocked(dump_fp);
-			obstack_1grow(&macros, the_char);
+			(void)(obstack_1grow(&macros, the_char));
 		    }while(the_char);
 		    char_pointer = obstack_finish (&macros);
 		    if(!(*char_pointer))
 			break;
 		    do{
 			the_char = getc_unlocked(dump_fp);
-			obstack_1grow(&macros, the_char);
+			(void)(obstack_1grow(&macros, the_char));
 		    }while(the_char);
 		    if(hash_insert(ma_hash, char_pointer,
 				   obstack_finish(&macros)))
@@ -4864,7 +4670,7 @@ int value)
 		do{
 		    do{
 			the_char = getc_unlocked(dump_fp);
-			obstack_1grow(&macros, the_char);
+			(void)(obstack_1grow(&macros, the_char));
 		    }while(the_char);
 		    char_pointer = obstack_base(&macros);
 		    obstack_next_free(&macros) = char_pointer;
@@ -4898,7 +4704,7 @@ int value)
 static
 void
 s_subsections_via_symbols(
-int value)
+uintptr_t value)
 {
 	demand_empty_rest_of_line();
 	subsections_via_symbols = TRUE;
@@ -4913,11 +4719,12 @@ int value)
 static
 void
 s_machine(
-int value)
+uintptr_t value)
 {
     char *arch_name, c;
     struct arch_flag arch_flag;
     cpu_subtype_t new_cpusubtype;
+    const struct arch_flag *family_arch_flag;
 
 	arch_name = input_line_pointer;
 	/*
@@ -4929,26 +4736,32 @@ int value)
 	*--input_line_pointer = 0;
 
 	if(force_cpusubtype_ALL == FALSE){
-	    if(get_arch_from_flag(arch_name, &arch_flag) == 0){
+	    family_arch_flag = NULL;
+	    if(strcmp(arch_name, "all") == 0){
+		family_arch_flag = get_arch_family_from_cputype(md_cputype);
+		if(family_arch_flag != NULL)
+		    arch_flag = *family_arch_flag;
+	    }
+	    if(family_arch_flag == NULL &&
+	       get_arch_from_flag(arch_name, &arch_flag) == 0){
 		as_bad("unknown .machine argument: %s", arch_name);
+		return;
+	    }
+	    if(arch_flag.cputype != md_cputype){
+		as_bad("invalid .machine argument: %s", arch_name);
 	    }
 	    else{
-		if(arch_flag.cputype != md_cputype){
-		    as_bad("invalid .machine argument: %s", arch_name);
+		new_cpusubtype = cpusubtype_combine(md_cputype,
+						    md_cpusubtype,
+						    arch_flag.cpusubtype);
+		if(new_cpusubtype == -1){
+		    as_bad(".machine argument: %s can not be combined "
+			    "with previous .machine directives, -arch "
+			    "arguments or machine specific instructions",
+			    arch_name);
 		}
 		else{
-		    new_cpusubtype = cpusubtype_combine(md_cputype,
-						        md_cpusubtype,
-						        arch_flag.cpusubtype);
-		    if(new_cpusubtype == -1){
-			as_bad(".machine argument: %s can not be combined "
-				"with previous .machine directives, -arch "
-				"arguments or machine specific instructions",
-				arch_name);
-		    }
-		    else{
-			archflag_cpusubtype = new_cpusubtype;
-		    }
+		    archflag_cpusubtype = new_cpusubtype;
 		}
 	    }
 	}
@@ -4967,7 +4780,7 @@ int value)
 static
 void
 s_secure_log_reset(
-int value)
+uintptr_t value)
 {
 	s_secure_log_used = FALSE;
 	demand_empty_rest_of_line();
@@ -4985,7 +4798,7 @@ int value)
 static
 void
 s_secure_log_unique(
-int value)
+uintptr_t value)
 {
     FILE *secure_log_fp;
     char *log_msg, c;
@@ -5022,6 +4835,92 @@ int value)
 
 	*input_line_pointer = c;
 	demand_empty_rest_of_line();
+}
+
+/*
+ * When inlineasm_checks is non-zero, then these variable are set and used
+ * when reporting errors for the properties of GCC function-scope inline asms.
+ */
+int inlineasm_checks = 0;
+char *inlineasm_file_name = NULL;
+int inlineasm_line_number = 0;
+int inlineasm_column_number = 0;
+
+/*
+ * s_inlineasm() handles the pseudo ops:
+ *	.inlineasmstart [[["file_name"] [,<line_number>]] [,<column_number>]]
+ *	.inlineasmend
+ * The parameter value is 1 for start and 0 for end.  The arguments to the
+ * start directive are optional.
+ *
+ * This causes the assembler enforces properties required of GCC function-scope
+ * inline asms.
+ *
+ * The requirement that does not allow non-numeric labels to be defined in an
+ * inline asm is checked for in colon().
+ */
+static
+void
+s_inlineasm(
+uintptr_t value)
+{
+    int length;
+
+	inlineasm_checks = value;
+	inlineasm_file_name = NULL;
+	inlineasm_line_number = 0;
+	inlineasm_column_number = 0;
+
+	SKIP_WHITESPACE();
+	if(value == 1 && *input_line_pointer == '"'){
+	    if((inlineasm_file_name = demand_copy_string(&length))){
+		SKIP_WHITESPACE();
+		if(*input_line_pointer == ','){
+		    input_line_pointer++;
+		    inlineasm_line_number = get_absolute_expression();
+		    SKIP_WHITESPACE();
+		    if(*input_line_pointer == ','){
+			input_line_pointer++;
+			inlineasm_column_number = get_absolute_expression();
+		    }
+		}
+	    }
+	}
+	demand_empty_rest_of_line();
+}
+
+/*
+ * s_incbin() implements the pseudo op:
+ *	.incbin "filename"
+ */
+static
+void
+s_incbin(
+uintptr_t value)
+{
+    char *filename, *whole_file_name, *p;
+    int length;
+    FILE *fp;
+    int the_char;
+
+	/* Some assemblers tolerate immediately following '"' */
+	if((filename = demand_copy_string( & length ) )) {
+	    demand_empty_rest_of_line();
+	    whole_file_name = find_an_include_file(filename);
+	    if(whole_file_name != NULL &&
+	       (fp = fopen(whole_file_name, "r+"))){
+		do{
+		    the_char = getc_unlocked(fp);
+		    if (the_char != -1){
+	    		p = frag_more(1);
+			*p = the_char;
+		    }
+		}while(the_char != -1);
+		fclose(fp);
+		return;
+	    }
+	    as_fatal("Couldn't find the .incbin file: \"%s\"", filename);
+	}
 }
 
 #ifdef SPARC
@@ -5064,7 +4963,7 @@ s_seg (ignore)
       if (ps_t == 0)
 	as_bad ("invalid .seg argument");
 
-      printf("INDEX %s, %d\n", s, ps_t->poc_val);
+      printf("INDEX %s, %p\n", s, (void *)ps_t->poc_val);
 
       s_builtin_section ((const struct builtin_section *)ps_t->poc_val);
       demand_empty_rest_of_line();
@@ -5088,8 +4987,164 @@ s_seg (ignore)
 static
 void
 s_ppcasm_end(
-int value)
+uintptr_t value)
 {
       demand_empty_rest_of_line();
 }
 #endif /* PPC */
+
+/* Return the size of a LEB128 value.  */
+
+static inline int
+sizeof_sleb128_32 (int32_t value)
+{
+  register int size = 0;
+  register unsigned byte;
+
+  do
+    {
+      byte = (value & 0x7f);
+      /* Sadly, we cannot rely on typical arithmetic right shift behaviour.
+	 Fortunately, we can structure things so that the extra work reduces
+	 to a noop on systems that do things "properly".  */
+      value = (value >> 7) | ~(-(offsetT)1 >> 7);
+      size += 1;
+    }
+  while (!(((value == 0) && ((byte & 0x40) == 0))
+	   || ((value == -1) && ((byte & 0x40) != 0))));
+
+  return size;
+}
+
+static inline int
+sizeof_sleb128_64 (int64_t value)
+{
+  register int size = 0;
+  register unsigned byte;
+
+  do
+    {
+      byte = (value & 0x7f);
+      /* Sadly, we cannot rely on typical arithmetic right shift behaviour.
+	 Fortunately, we can structure things so that the extra work reduces
+	 to a noop on systems that do things "properly".  */
+      value = (value >> 7) | ~(-(offsetT)1 >> 7);
+      size += 1;
+    }
+  while (!(((value == 0) && ((byte & 0x40) == 0))
+	   || ((value == -1) && ((byte & 0x40) != 0))));
+
+  return size;
+}
+
+static inline int
+sizeof_uleb128_32 (uint32_t value)
+{
+  register int size = 0;
+  register unsigned byte;
+
+  do
+    {
+      byte = (value & 0x7f);
+      value >>= 7;
+      size += 1;
+    }
+  while (value != 0);
+
+  return size;
+}
+
+static inline int
+sizeof_uleb128_64 (uint64_t value)
+{
+  register int size = 0;
+  register unsigned byte;
+
+  do
+    {
+      byte = (value & 0x7f);
+      value >>= 7;
+      size += 1;
+    }
+  while (value != 0);
+
+  return size;
+}
+
+#ifdef ARCH64
+int
+sizeof_leb128 (valueT value, int sign)
+{
+  if (sign)
+    return sizeof_sleb128_64 ((offsetT) value);
+  else
+    return sizeof_uleb128_64 (value);
+}
+#else
+int
+sizeof_leb128 (valueT value, int sign)
+{
+  if (sign)
+    return sizeof_sleb128_32 ((offsetT) value);
+  else
+    return sizeof_uleb128_32 (value);
+}
+#endif
+
+/* Output a LEB128 value.  */
+
+static inline int
+output_sleb128 (char *p, offsetT value)
+{
+  register char *orig = p;
+  register int more;
+
+  do
+    {
+      unsigned byte = (value & 0x7f);
+
+      /* Sadly, we cannot rely on typical arithmetic right shift behaviour.
+	 Fortunately, we can structure things so that the extra work reduces
+	 to a noop on systems that do things "properly".  */
+      value = (value >> 7) | ~(-(offsetT)1 >> 7);
+
+      more = !((((value == 0) && ((byte & 0x40) == 0))
+		|| ((value == -1) && ((byte & 0x40) != 0))));
+      if (more)
+	byte |= 0x80;
+
+      *p++ = byte;
+    }
+  while (more);
+
+  return p - orig;
+}
+
+static inline int
+output_uleb128 (char *p, valueT value)
+{
+  char *orig = p;
+
+  do
+    {
+      unsigned byte = (value & 0x7f);
+      value >>= 7;
+      if (value != 0)
+	/* More bytes to follow.  */
+	byte |= 0x80;
+
+      *p++ = byte;
+    }
+  while (value != 0);
+
+  return p - orig;
+}
+
+int
+output_leb128 (char *p, valueT value, int sign)
+{
+  if (sign)
+    return output_sleb128 (p, (offsetT) value);
+  else
+    return output_uleb128 (p, value);
+}

@@ -56,8 +56,11 @@
 #include "i386-opcode.h"
 #include "sections.h"
 #include "input-scrub.h"
+#include "dwarf2dbg.h"
 #ifdef ARCH64
 #include <mach-o/x86_64/reloc.h>
+#else
+#include <mach-o/reloc.h>
 #endif
 
 #ifdef NeXT_MOD
@@ -88,6 +91,8 @@
 
 #ifdef ARCH64
 typedef enum reloc_type_x86_64 bfd_reloc_code_real_type;
+#else
+typedef enum reloc_type_generic bfd_reloc_code_real_type;
 #endif
 
 #ifndef DEFAULT_ARCH
@@ -115,11 +120,11 @@ static INLINE int fits_in_unsigned_long PARAMS ((offsetT));
 static INLINE int fits_in_signed_long PARAMS ((offsetT));
 static int smallest_imm_type PARAMS ((offsetT));
 static offsetT offset_in_range PARAMS ((offsetT, int));
-static int add_prefix PARAMS ((unsigned int));
-static void set_code_flag PARAMS ((int));
-static void set_16bit_gcc_code_flag PARAMS ((int));
-static void set_intel_syntax PARAMS ((int));
-static void set_cpu_arch PARAMS ((int));
+static int add_prefix PARAMS ((unsigned int, unsigned int));
+static void set_code_flag PARAMS ((uintptr_t));
+static void set_16bit_gcc_code_flag PARAMS ((uintptr_t));
+static void set_intel_syntax PARAMS ((uintptr_t));
+static void set_cpu_arch PARAMS ((uintptr_t));
 #ifdef TE_PE
 static void pe_directive_secrel PARAMS ((int));
 #endif
@@ -158,7 +163,7 @@ static void s_bss PARAMS ((int));
 #endif
 #ifdef ARCH64
 #ifdef NeXT_MOD
-static symbolS *x86_64_resolve_local_symbol(const symbolS *sym);
+static symbolS *x86_64_resolve_local_symbol(symbolS *sym);
 #endif
 #endif
 
@@ -213,6 +218,8 @@ struct _i386_insn
 #ifdef ARCH64
     /* Relocation type for operand */
     enum reloc_type_x86_64 reloc[MAX_OPERANDS];
+#else
+    enum reloc_type_generic reloc[MAX_OPERANDS];
 #endif
 
     /* BASE_REG, INDEX_REG, and LOG2_SCALE_FACTOR are used to encode
@@ -544,11 +551,8 @@ const pseudo_typeS md_pseudo_table[] =
   {"code64", set_code_flag, CODE_64BIT},
   {"intel_syntax", set_intel_syntax, 1},
   {"att_syntax", set_intel_syntax, 0},
-#ifndef NeXT_MOD
-/* We don't support .file/.loc yet -- see <rdar://problem/4298593>. */
-  {"file", (void (*) PARAMS ((int))) dwarf2_directive_file, 0},
+  {"file", (void (*) PARAMS ((uintptr_t))) dwarf2_directive_file, 0},
   {"loc", dwarf2_directive_loc, 0},
-#endif
 #ifdef TE_PE
   {"secrel32", pe_directive_secrel, 0},
 #endif
@@ -818,8 +822,9 @@ struct symbol *sym)
    class already exists, 1 if non rep/repne added, 2 if rep/repne
    added.  */
 static int
-add_prefix (prefix)
-     unsigned int prefix;
+add_prefix(
+unsigned int prefix,
+unsigned int mandatory)
 {
   int ret = 1;
   int q;
@@ -870,13 +875,18 @@ add_prefix (prefix)
     }
 
   i.prefixes += 1;
+  if (mandatory)
+    {
+      i.prefix[mandatory] = prefix;
+      return 1;
+    }
   i.prefix[q] = prefix;
   return ret;
 }
 
 static void
-set_code_flag (value)
-     int value;
+set_code_flag (
+uintptr_t value)
 {
   flag_code = value;
   cpu_arch_flags &= ~(Cpu64 | CpuNo64);
@@ -897,8 +907,8 @@ set_code_flag (value)
 }
 
 static void
-set_16bit_gcc_code_flag (new_code_flag)
-     int new_code_flag;
+set_16bit_gcc_code_flag (
+uintptr_t new_code_flag)
 {
   flag_code = new_code_flag;
   cpu_arch_flags &= ~(Cpu64 | CpuNo64);
@@ -907,8 +917,8 @@ set_16bit_gcc_code_flag (new_code_flag)
 }
 
 static void
-set_intel_syntax (syntax_flag)
-     int syntax_flag;
+set_intel_syntax (
+uintptr_t syntax_flag)
 {
   /* Find out if register prefixing is specified.  */
   int ask_naked_reg = 0;
@@ -952,8 +962,8 @@ set_intel_syntax (syntax_flag)
 }
 
 static void
-set_cpu_arch (dummy)
-     int dummy ATTRIBUTE_UNUSED;
+set_cpu_arch(
+uintptr_t dummy)
 {
   SKIP_WHITESPACE ();
 
@@ -1022,7 +1032,7 @@ set_cpu_arch (dummy)
 }
 
 #ifndef NeXT_MOD
-unsigned long
+uint32_t
 i386_mach ()
 {
   if (!strcmp (default_arch, "x86_64"))
@@ -1266,7 +1276,7 @@ pe (e)
 {
   fprintf (stdout, "    operation     %d\n", e->X_op);
   fprintf (stdout, "    add_number    %ld (%lx)\n",
-	   (long) e->X_add_number, (long) e->X_add_number);
+	   (int32_t) e->X_add_number, (int32_t) e->X_add_number);
   if (e->X_add_symbol)
     {
       fprintf (stdout, "    add_symbol    ");
@@ -1377,7 +1387,7 @@ reloc (size, pcrel, sign, other)
 	case 4: return BFD_RELOC_32_PCREL;
 #endif
 	}
-      as_bad (_("can not do %d byte pc-relative relocation"), size);
+      as_bad (_("cannot do %d byte pc-relative relocation"), size);
     }
   else
     {
@@ -1387,7 +1397,6 @@ reloc (size, pcrel, sign, other)
 #ifdef NeXT_MOD
       case 4:
           as_bad (_("32-bit absolute addressing is not supported for x86-64"));
-          abort();
 		  break;
 #else
 	  case 4: return BFD_RELOC_X86_64_32S;
@@ -1408,11 +1417,10 @@ reloc (size, pcrel, sign, other)
 	  case 8: return BFD_RELOC_64;
 #endif
 	  }
-      as_bad (_("can not do %s %d byte relocation"),
+      as_bad (_("cannot do %s %d byte relocation"),
 	      sign ? "signed" : "unsigned", size);
     }
 
-  abort ();
 #ifdef NeXT_MOD
   return NO_RELOC;
 #else
@@ -1538,17 +1546,13 @@ void
 md_assemble (line)
      char *line;
 {
-#ifdef ARCH64
   int j;
-#endif
   char mnemonic[MAX_MNEM_SIZE];
 
   /* Initialize globals.  */
   memset (&i, '\0', sizeof (i));
-#ifdef ARCH64
   for (j = 0; j < MAX_OPERANDS; j++)
     i.reloc[j] = NO_RELOC;
-#endif
   memset (disp_expressions, '\0', sizeof (disp_expressions));
   memset (im_expressions, '\0', sizeof (im_expressions));
   save_stack_p = save_stack;
@@ -1582,7 +1586,9 @@ md_assemble (line)
   if (i.imm_operands)
     optimize_imm ();
 
-  if (i.disp_operands)
+  /* Don't optimize displacement for movabs since it only takes 64bit
+     displacement.  */
+  if (i.disp_operands && strcmp (mnemonic, "movabs") != 0)
     optimize_disp ();
 
   /* Next, we find a template that matches the given insn,
@@ -1620,7 +1626,7 @@ md_assemble (line)
     }
 
   if (i.tm.opcode_modifier & FWait)
-    if (!add_prefix (FWAIT_OPCODE))
+    if (!add_prefix (FWAIT_OPCODE, 0))
       return;
 
   /* Check string instruction segment overrides.  */
@@ -1765,7 +1771,7 @@ md_assemble (line)
     }
 
   if (i.rex != 0)
-    add_prefix (REX_OPCODE | i.rex);
+    add_prefix (REX_OPCODE | i.rex, 0);
 
 #ifdef NeXT_MOD	/* generate stabs for debugging assembly code */
   /*
@@ -1785,6 +1791,12 @@ md_assemble (line)
 	  frag_now);
   }
 #endif /* NeXT_MOD */
+  /*
+   * If the --gdwarf2 flag is present generate a .loc for this.
+   */
+  if(debug_type == DEBUG_DWARF2 && frchain_now->frch_nsect == text_nsect){
+	dwarf2_loc(dwarf2_file_number, logical_input_line);
+  }
 
 #ifdef NeXT_MOD	/* mark sections containing instructions */
   /*
@@ -1863,7 +1875,7 @@ parse_insn (line, mnemonic)
 	      return NULL;
 	    }
 	  /* Add prefix, checking for repeated prefixes.  */
-	  switch (add_prefix (current_templates->start->base_opcode))
+	  switch (add_prefix (current_templates->start->base_opcode, 0))
 	    {
 	    case 0:
 	      return NULL;
@@ -1935,13 +1947,13 @@ parse_insn (line, mnemonic)
 	{
 	  if (l[2] == 't')
 	    {
-	      if (!add_prefix (DS_PREFIX_OPCODE))
+	      if (!add_prefix (DS_PREFIX_OPCODE, 0))
 		return NULL;
 	      l += 3;
 	    }
 	  else if (l[2] == 'n')
 	    {
-	      if (!add_prefix (CS_PREFIX_OPCODE))
+	      if (!add_prefix (CS_PREFIX_OPCODE, 0))
 		return NULL;
 	      l += 3;
 	    }
@@ -2286,37 +2298,51 @@ optimize_disp ()
   int op;
 
   for (op = i.operands; --op >= 0;)
-    if ((i.types[op] & Disp) && i.op[op].disps->X_op == O_constant)
+    if (i.types[op] & Disp)
       {
-	offsetT disp = i.op[op].disps->X_add_number;
+	if (i.op[op].disps->X_op == O_constant)
+	  {
+	    offsetT disp = i.op[op].disps->X_add_number;
 
-	if (i.types[op] & Disp16)
-	  {
-	    /* We know this operand is at most 16 bits, so
-	       convert to a signed 16 bit number before trying
-	       to see whether it will fit in an even smaller
-	       size.  */
-
-	    disp = (((disp & 0xffff) ^ 0x8000) - 0x8000);
+	    if ((i.types[op] & Disp16)
+		&& (disp & ~(offsetT) 0xffff) == 0)
+	      {
+		/* If this operand is at most 16 bits, convert
+		   to a signed 16 bit number and don't use 64bit
+		   displacement.  */
+		disp = (((disp & 0xffff) ^ 0x8000) - 0x8000);
+		i.types[op] &= ~Disp64;
+	      }
+	    if ((i.types[op] & Disp32)
+		&& (disp & ~(((offsetT) 2 << 31) - 1)) == 0)
+	      {
+		/* If this operand is at most 32 bits, convert
+		   to a signed 32 bit number and don't use 64bit
+		   displacement.  */
+		disp &= (((offsetT) 2 << 31) - 1);
+		disp = (disp ^ ((offsetT) 1 << 31)) - ((addressT) 1 << 31);
+		i.types[op] &= ~Disp64;
+	      }
+	    if (!disp && (i.types[op] & BaseIndex))
+	      {
+		i.types[op] &= ~Disp;
+		i.op[op].disps = 0;
+		i.disp_operands--;
+	      }
+	    else if (flag_code == CODE_64BIT)
+	      {
+		if (fits_in_signed_long (disp))
+		  i.types[op] |= Disp32S;
+		if (fits_in_unsigned_long (disp))
+		  i.types[op] |= Disp32;
+	      }
+	    if ((i.types[op] & (Disp32 | Disp32S | Disp16))
+		&& fits_in_signed_byte (disp))
+	      i.types[op] |= Disp8;
 	  }
-	else if (i.types[op] & Disp32)
-	  {
-	    /* We know this operand is at most 32 bits, so convert to a
-	       signed 32 bit number before trying to see whether it will
-	       fit in an even smaller size.  */
-	    disp &= (((offsetT) 2 << 31) - 1);
-	    disp = (disp ^ ((offsetT) 1 << 31)) - ((addressT) 1 << 31);
-	  }
-	if (flag_code == CODE_64BIT)
-	  {
-	    if (fits_in_signed_long (disp))
-	      i.types[op] |= Disp32S;
-	    if (fits_in_unsigned_long (disp))
-	      i.types[op] |= Disp32;
-	  }
-	if ((i.types[op] & (Disp32 | Disp32S | Disp16))
-	    && fits_in_signed_byte (disp))
-	  i.types[op] |= Disp8;
+	else
+	  /* We only support 64bit displacement on constants.  */
+	  i.types[op] &= ~Disp64;
       }
 }
 
@@ -2687,7 +2713,7 @@ process_suffix (void)
 	  if (i.tm.opcode_modifier & JumpByte) /* jcxz, loop */
 	    prefix = ADDR_PREFIX_OPCODE;
 
-	  if (!add_prefix (prefix))
+	  if (!add_prefix (prefix, 0))
 	    return 0;
 	}
 
@@ -2983,12 +3009,45 @@ process_operands ()
      is converted into xor %reg, %reg.  */
   if (i.tm.opcode_modifier & regKludge)
     {
-      unsigned int first_reg_op = (i.types[0] & Reg) ? 0 : 1;
-      /* Pretend we saw the extra register operand.  */
-      assert (i.op[first_reg_op + 1].regs == 0);
-      i.op[first_reg_op + 1].regs = i.op[first_reg_op].regs;
-      i.types[first_reg_op + 1] = i.types[first_reg_op];
-      i.reg_operands = 2;
+	if (i.tm.cpu_flags & CpuSSE4)
+	{
+	   /* The first operand in instruction blendvpd, blendvps and
+	      pblendvb in SSE4.1 is implicit and must be xmm0.  */
+	   assert (i.operands == 3
+		   && i.reg_operands >= 2
+		   && i.types[0] == RegXMM);
+	   if (i.op[0].regs->reg_num != 0)
+	     {
+	       if (intel_syntax)
+		 as_bad (_("the last operand of `%s' must be `%sxmm0'"),
+			 i.tm.name, "%");
+	       else
+		 as_bad (_("the first operand of `%s' must be `%sxmm0'"),
+			 i.tm.name, "%");
+	       return 0;
+	     }
+	   i.op[0] = i.op[1];
+	   i.op[1] = i.op[2];
+	   i.types[0] = i.types[1];
+	   i.types[1] = i.types[2];
+	   i.operands--;
+	   i.reg_operands--;
+
+	   /* We need to adjust fields in i.tm since they are used by
+	      build_modrm_byte.  */
+	   i.tm.operand_types [0] = i.tm.operand_types [1];
+	   i.tm.operand_types [1] = i.tm.operand_types [2];
+	   i.tm.operands--;
+	 }
+       else
+	 {
+	   unsigned int first_reg_op = (i.types[0] & Reg) ? 0 : 1;
+	   /* Pretend we saw the extra register operand.  */
+	   assert (i.op[first_reg_op + 1].regs == 0);
+	   i.op[first_reg_op + 1].regs = i.op[first_reg_op].regs;
+	   i.types[first_reg_op + 1] = i.types[first_reg_op];
+	   i.reg_operands = 2;
+	 }
     }
 
   if (i.tm.opcode_modifier & ShortForm)
@@ -3059,7 +3118,7 @@ process_operands ()
      always be used.  */
   if ((i.seg[0]) && (i.seg[0] != default_seg))
     {
-      if (!add_prefix (i.seg[0]->seg_prefix))
+      if (!add_prefix (i.seg[0]->seg_prefix, 0))
 	return 0;
     }
   return 1;
@@ -3112,7 +3171,7 @@ build_modrm_byte ()
 	  if (!((i.types[0] | i.types[1]) & Control))
 	    abort ();
 	  i.rex &= ~(REX_EXTX | REX_EXTZ);
-	  add_prefix (LOCK_PREFIX_OPCODE);
+	  add_prefix (LOCK_PREFIX_OPCODE, 0);
 	}
     }
   else
@@ -3617,12 +3676,10 @@ output_insn ()
   fragS *insn_start_frag;
   offsetT insn_start_off;
 
-#ifndef NeXT_MOD
   /* Tie dwarf2 debug info to the address at the start of the insn.
      We can't do this after the insn has been output as the current
      frag may have been closed off.  eg. by frag_var.  */
   dwarf2_emit_insn (0);
-#endif
 
   insn_start_frag = frag_now;
   insn_start_off = frag_now_fix ();
@@ -3654,7 +3711,7 @@ output_insn ()
 
 	  if (prefix != REPE_PREFIX_OPCODE
 	      || i.prefix[LOCKREP_PREFIX] != REPE_PREFIX_OPCODE)
-	    add_prefix (prefix);
+	    add_prefix (prefix, MAN_PREFIX);
 	}
       else
 	if ((i.tm.cpu_flags & CpuPadLock) == 0
@@ -3671,10 +3728,10 @@ output_insn ()
 #ifdef NeXT_MOD
       {
 	      prefix_shift = (i.tm.cpu_flags & CpuMNI) ? 24 : 16;
-	      add_prefix ((i.tm.base_opcode >> prefix_shift) & 0xff);
+	      add_prefix ((i.tm.base_opcode >> prefix_shift) & 0xff,MAN_PREFIX);
       }
 #else
-	  add_prefix ((i.tm.base_opcode >> 16) & 0xff);
+	  add_prefix ((i.tm.base_opcode >> 16) & 0xff, MAN_PREFIX);
 #endif
 
       /* The prefix bytes.  */
@@ -3835,8 +3892,50 @@ output_disp (insn_start_frag, insn_start_off)
 #if !ARCH64
 	      fix_new (frag_now, p - frag_now->fr_literal, size,
 		       i.op[n].disps->X_add_symbol, i.op[n].disps->X_subtract_symbol,
-		       i.op[n].disps->X_add_number, 0, 0, 0);
+		       i.op[n].disps->X_add_number, 0, 0, i.reloc[n]);
 #else
+#ifdef NeXT_MOD
+	      /*
+	       * For the x86_64 architecure on Mac OS X it is possible to
+	       * encode a signed 32-bit expression of the form:
+	       *	"add_symbol - subtract_symbol + number" 
+	       * using two relocation entries pointing at the same 32-bits.
+	       * The first one has to be a X86_64_RELOC_SUBTRACTOR then must
+	       * be followed by a X86_64_RELOC_UNSIGNED.
+	       */
+              if(size == 4 && pcrel == 0 && sign == 1 &&
+		 i.reloc[n] == NO_RELOC &&
+		 i.op[n].disps->X_add_symbol != NULL &&
+		 i.op[n].disps->X_subtract_symbol != NULL){
+		  fix_new (frag_now, p - frag_now->fr_literal, size,
+		           i.op[n].disps->X_add_symbol,
+			   i.op[n].disps->X_subtract_symbol,
+		           i.op[n].disps->X_add_number, pcrel, 0,
+			   X86_64_RELOC_UNSIGNED);
+		  return;
+	      }
+	      /*
+	       * There can be a .set symbol used for the displacement value that
+	       * is an assembly time constant made from a difference of two
+	       * symbols.  Something like this:
+	       *	.set    difference, b-a
+	       *	movl    difference+0(%r9, %rbp), %r8d
+	       * and in this case we create a fix up for this and it will end up
+	       * with the expression as the value of the displacement in the
+	       * instruction.
+	       */
+	      if(size == 4 && pcrel == 0 && sign == 1 &&
+		 i.reloc[n] == NO_RELOC &&
+		 i.op[n].disps->X_add_symbol != NULL &&
+		 i.op[n].disps->X_add_symbol->expression != NULL &&
+		 i.op[n].disps->X_subtract_symbol == NULL){
+		  fix_new (frag_now, p - frag_now->fr_literal, size,
+		           i.op[n].disps->X_add_symbol, NULL,
+		           i.op[n].disps->X_add_number, pcrel, 0,
+			   X86_64_RELOC_UNSIGNED);
+		  return;
+	      }
+#endif /* NeXT_MOD */
 	      reloc_type = reloc (size, pcrel, sign, i.reloc[n]);
 #ifndef NeXT_MOD
 	      if (reloc_type == BFD_RELOC_32
@@ -3946,6 +4045,27 @@ output_imm (insn_start_frag, insn_start_off)
 			 i.op[n].imms->X_subtract_symbol,
 			 i.op[n].imms->X_add_number, 0, 0, 0);
 #else
+#ifdef NeXT_MOD
+	      /*
+	       * For the x86_64 architecure on Mac OS X it is possible to
+	       * encode a signed 32-bit expression of the form:
+	       *	"add_symbol - subtract_symbol + number" 
+	       * using two relocation entries pointing at the same 32-bits.
+	       * The first one has to be a X86_64_RELOC_SUBTRACTOR then must
+	       * be followed by a X86_64_RELOC_UNSIGNED.
+	       */
+              if(size == 4 && sign == 1 &&
+		 i.reloc[n] == NO_RELOC &&
+		 i.op[n].imms->X_add_symbol != NULL &&
+		 i.op[n].imms->X_subtract_symbol != NULL){
+		  fix_new (frag_now, p - frag_now->fr_literal, size,
+		           i.op[n].imms->X_add_symbol,
+			   i.op[n].imms->X_subtract_symbol,
+		           i.op[n].imms->X_add_number, 0, 0,
+			   X86_64_RELOC_UNSIGNED);
+		  return;
+	      }
+#endif /* NeXT_MOD */
 	      reloc_type = reloc (size, 0, sign, i.reloc[n]);
 
 #ifndef NeXT_MOD
@@ -4037,7 +4157,7 @@ output_imm (insn_start_frag, insn_start_off)
     }
 }
 
-#if !defined(ARCH64) && ((!defined (OBJ_ELF) && !defined (OBJ_MAYBE_ELF)) || defined (LEX_AT))
+#if (!defined(NeXT_MOD) && !defined(ARCH64)) && ((!defined (OBJ_ELF) && !defined (OBJ_MAYBE_ELF)) || defined (LEX_AT)) 
 # define lex_got(reloc, adjust) NULL
 #else
 #ifdef NeXT_MOD
@@ -4074,7 +4194,12 @@ lex_got (reloc, adjust)
 #endif
   } gotrel[] = {
 #ifdef NeXT_MOD
+#ifdef ARCH64
     { "GOTPCREL", { 0,                        0, X86_64_RELOC_GOT } },
+    { "TLVP",     { 0,                        0, X86_64_RELOC_TLV } },
+#else
+    { "TLVP",     { GENERIC_RELOC_TLV,        0, 0 } },
+#endif
 #else
     { "PLT",      { BFD_RELOC_386_PLT32,      0, BFD_RELOC_X86_64_PLT32    } },
     { "GOTOFF",   { BFD_RELOC_386_GOTOFF,     0, 0                         } },
@@ -4451,12 +4576,12 @@ i386_displacement (disp_start, disp_end)
   END_STRING_AND_SAVE (disp_end);
 
 #ifndef GCC_ASM_O_HACK
-#define GCC_ASM_O_HACK 0
+#define GCC_ASM_O_HACK 1
 #endif
 #if GCC_ASM_O_HACK
   END_STRING_AND_SAVE (disp_end + 1);
   if ((i.types[this_operand] & BaseIndex) != 0
-      && displacement_string_end[-1] == '+')
+      && disp_end[-1] == '+')
     {
       /* This hack is to avoid a warning when using the "o"
 	 constraint within gcc asm statements.
@@ -4491,7 +4616,7 @@ i386_displacement (disp_start, disp_end)
 
 	 So here we provide the missing zero.  */
 
-      *displacement_string_end = '0';
+      *disp_end = '0';
     }
 #endif
 #ifndef LEX_AT
@@ -5893,7 +6018,7 @@ md_section_align (segment, size)
    next instruction.  That is, the address of the offset, plus its
    size, since the offset is always the last part of the insn.  */
 
-long
+int32_t
 md_pcrel_from (fixP)
 #ifdef NeXT_MOD
      const
@@ -5965,9 +6090,12 @@ i386_validate_fix (fixp)
 #if ARCH64
 static
 symbolS *
-x86_64_resolve_local_symbol(const symbolS *sym)
+x86_64_resolve_local_symbol(symbolS *sym)
 {
 	symbolS *prev_symbol;
+
+	if(sym->sy_has_been_resolved)
+	    return(sym->sy_prev_resolved);
 	for (prev_symbol = sym->sy_prev_by_index; prev_symbol != NULL; prev_symbol = prev_symbol->sy_prev_by_index)
 	{
 		/*
@@ -5985,10 +6113,12 @@ x86_64_resolve_local_symbol(const symbolS *sym)
 			}
 		}
 	}
+	sym->sy_prev_resolved = prev_symbol;
+	sym->sy_has_been_resolved =1;
 	return prev_symbol;
 }
 
-long
+int32_t
 x86_64_fixup_symbol(fixS *fix, int nsect, symbolS **sym)
 {
 	/*
@@ -6002,17 +6132,21 @@ x86_64_fixup_symbol(fixS *fix, int nsect, symbolS **sym)
 	 * does not start with 'L', is not a stab, and is in the same
 	 * section.
 	 *
-	 * Local labels in sections with fixed-size data, fixups in DWARF
-	 * debug sections, and local labels with no previous symbol in
-	 * their section are an exception to this rule.  We emit
+	 * Local labels in sections with fixed-size data and fixups in DWARF
+	 * debug sections are an exception to this rule.  We emit
 	 * non-external relocations for those, but the offset is the
 	 * RIP-relative offset, which is calculated from the end of the
 	 * instruction.  We assume that the fixP ends at the end of the
 	 * instruction.  We only make this adjustment for PC-relative
 	 * fixups.
+	 *
+	 * Local labels with no previous symbol in their section the symbol and
+	 * offset are left unchanged (even for PC-relative fixups).  So the
+	 * relocation will be done by our caller with the local symbol and no
+	 * relocation entry will be emitted.
 	 */
 	symbolS *prev_symbol;
-	long offset = 0;
+	int32_t offset = 0;
 
 	if (sym != NULL && *sym != NULL && is_local_symbol(*sym) && (((*sym)->sy_type & N_SECT) == N_SECT) && !is_section_cstring_literals((*sym)->sy_other))
 	{
@@ -6034,6 +6168,17 @@ x86_64_fixup_symbol(fixS *fix, int nsect, symbolS **sym)
 			}
 			else if (fix->fx_pcrel)
 			{
+			     /*
+			      * There is no previous symbol that is a non-local
+			      * symbol and this fix up is pc relative.  If this
+			      * symbol is defined in a section and the fix up is
+			      * for the same section, don't change the offset
+			      * becase the relocation must be done with the
+			      * local symbol to be correct.  And in this case no
+			      * relocation entry will need to be created.
+			      */
+			     if(((*sym)->sy_nlist.n_type & N_TYPE) == N_SECT &&
+				(*sym)->sy_nlist.n_sect != nsect)
 				offset -= md_pcrel_from(fix);
 			}
 		}
@@ -6119,7 +6264,7 @@ tc_gen_reloc (section, fixp)
 	    {
 	    default:
 	      as_bad_where (fixp->fx_file, fixp->fx_line,
-			    _("can not do %d byte pc-relative relocation"),
+			    _("cannot do %d byte pc-relative relocation"),
 			    fixp->fx_size);
 	      code = BFD_RELOC_32_PCREL;
 	      break;
@@ -6134,7 +6279,7 @@ tc_gen_reloc (section, fixp)
 	    {
 	    default:
 	      as_bad_where (fixp->fx_file, fixp->fx_line,
-			    _("can not do %d byte relocation"),
+			    _("cannot do %d byte relocation"),
 			    fixp->fx_size);
 	      code = BFD_RELOC_32;
 	      break;
@@ -6705,7 +6850,7 @@ intel_e09_1 ()
 	  else if (!intel_parser.got_a_float)
 	    {
 	      if (flag_code == CODE_16BIT)
-		add_prefix (DATA_PREFIX_OPCODE);
+		add_prefix (DATA_PREFIX_OPCODE, 0);
 	      suffix = LONG_DOUBLE_MNEM_SUFFIX;
 	    }
 	  else

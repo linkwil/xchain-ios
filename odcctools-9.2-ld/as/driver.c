@@ -1,15 +1,15 @@
 /*
- * The assembler driver that lives in /bin/as and runs the assembler for the
- * "-arch <arch_flag>" (if given) in /usr/libexec/gcc/darwin/<arch_flag>/as or
- * in /usr/local/libexec/gcc/darwin/<arch_flag>/as.  Or runs the assembler for
- * the host architecture as returned by get_arch_from_host().  The driver only
- * checks to make sure their are not multiple arch_flags and then passes all
- * flags to the assembler it will run.
+ * The assembler driver as and runs the assembler for the "-arch <arch_flag>"
+ * (if given) in ../libexec/as/<arch_flag>/as or
+ * ../local/libexec/as/<arch_flag>/as.  Or runs the assembler for the host
+ * architecture as returned by get_arch_from_host().  The driver only checks to
+ * make sure their are not multiple arch_flags and then passes all flags to the
+ * assembler it will run.
  */
 #include "stdio.h"
 #include "stdlib.h"
 #include "string.h"
-#include <sys/param.h>
+#include "libc.h"
 #include <sys/file.h>
 #include <mach/mach.h>
 #include "stuff/arch.h"
@@ -17,7 +17,6 @@
 #include "stuff/execute.h"
 #include "stuff/allocate.h"
 #include <mach-o/dyld.h>
-#include "config.h"
 
 /* used by error calls (exported) */
 char *progname = NULL;
@@ -28,48 +27,39 @@ int argc,
 char **argv,
 char **envp)
 {
-    const char *LIB =
-#if defined(__OPENSTEP__) || defined(__HERA__) || \
-    defined(__GONZO_BUNSEN_BEAKER__) || defined(__KODIAK__)
-		    "../libexec/";
-#else
-		    "../libexec/gcc/darwin/";
-#endif
-    const char *LOCALLIB =
-#if defined(__OPENSTEP__) || defined(__HERA__) || \
-    defined(__GONZO_BUNSEN_BEAKER__) || defined(__KODIAK__)
-		    "../local/libexec/";
-#else
-		    "../local/libexec/gcc/darwin/";
-#endif
+    const char *LIB = "../libexec/as/";
+    const char *LOCALLIB = "../local/libexec/as/";
     const char *AS = "/as";
+    const char *LLVM_MC = "llvm-mc";
 
-    int i;
-    unsigned long count, verbose;
+    int i, j;
+    uint32_t count, verbose, run_llvm_mc;
     char *p, c, *arch_name, *as, *as_local;
+    char **llvm_mc_argv;
     char *prefix, buf[MAXPATHLEN], resolved_name[PATH_MAX];
-    uint32_t bufsize;
+    unsigned long bufsize;
     struct arch_flag arch_flag;
     const struct arch_flag *arch_flags, *family_arch_flag;
+    enum bool oflag_specified;
 
 	progname = argv[0];
 	arch_name = NULL;
 	verbose = 0;
+	run_llvm_mc = 0;
+	oflag_specified = FALSE;
 	/*
 	 * Construct the prefix to the assembler driver.
 	 */
 	bufsize = MAXPATHLEN;
 	p = buf;
-#ifdef __APPLE__
 	i = _NSGetExecutablePath(p, &bufsize);
 	if(i == -1){
 	    p = allocate(bufsize);
 	    _NSGetExecutablePath(p, &bufsize);
 	}
-#else
-        strcpy(p, "/proc/self/exe");
-#endif
 	prefix = realpath(p, resolved_name);
+	if(realpath == NULL)
+	    system_fatal("realpath(3) for %s failed", p);
 	p = rindex(prefix, '/');
 	if(p != NULL)
 	    p[1] = '\0';
@@ -111,6 +101,7 @@ char **envp)
 		     * are not handled here but left to the assembler.
 		     */
 		    case 'o':	/* -o name */
+			oflag_specified = TRUE;
 		    case 'I':	/* -I directory */
 		    case 'm':	/* -mc68000, -mc68010 and mc68020 */
 		    case 'N':	/* -NEXTSTEP-deployment-target */
@@ -135,9 +126,13 @@ char **envp)
 		    case 'v':
 		    case 'W':
 		    case 'L':
-		    case 'l':
 		    default:
 			/* just recognize it, do nothing */
+			break;
+		    case 'l':
+			if(strcmp(p, "llvm-mc") == 0)
+			    run_llvm_mc = i;
+			/* also just recognize 'l' and do nothing */
 			break;
 		    case 'V':
 			verbose = 1;
@@ -148,13 +143,77 @@ char **envp)
 	}
 
 	/*
+	 * If the -llvm-mc flag was specified then run llvm-mc from the same
+	 * directory as the driver.
+	 */
+	if(run_llvm_mc != 0){
+	    as = makestr(prefix, LLVM_MC, NULL);
+	    if(access(as, F_OK) != 0){
+		printf("%s: assembler (%s) not installed\n", progname, as);
+		exit(1);
+	    }
+	    llvm_mc_argv = allocate(argc + 3);
+	    llvm_mc_argv[0] = as;
+	    j = 1;
+	    for(i = 1; i < argc; i++){
+		/*
+		 * Do not pass -llvm-mc
+		 */
+		if(i != run_llvm_mc){
+		    /*
+		     * Do not pass command line argument that are Unknown to
+		     * to llvm-mc.
+		     */
+		    if(strcmp(argv[i], "-v") != 0 &&
+		       strcmp(argv[i], "-V") != 0 &&
+		       strcmp(argv[i], "-force_cpusubtype_ALL") != 0){
+			llvm_mc_argv[j] = argv[i];
+			j++;
+		    }
+		}
+	    }
+	    /*
+	     * Add -filetype=obj or llvm-mc will write to stdout.
+	     */
+	    llvm_mc_argv[j] = "-filetype=obj";
+	    j++;
+	    /*
+	     * llvm-mc requires a "-o a.out" if not -o is specified.
+	     */
+	    if(oflag_specified == FALSE){
+		llvm_mc_argv[j] = "-o";
+		j++;
+		llvm_mc_argv[j] = "a.out";
+		j++;
+	    }
+	    llvm_mc_argv[j] = NULL;
+	    if(execute(llvm_mc_argv, verbose))
+		exit(0);
+	    else
+		exit(1);
+	}
+
+	/*
 	 * Construct the name of the assembler to run from the given -arch
 	 * <arch_flag> or if none then from the value returned from
 	 * get_arch_from_host().
-     * iphone-dev local: use DEFAULT_MACH_ARCH instead
 	 */
-	if(arch_name == NULL)
-        arch_name = DEFAULT_MACH_ARCH; 
+	if(arch_name == NULL){
+	    if(get_arch_from_host(&arch_flag, NULL)){
+#if __LP64__
+		/*
+		 * If runing as a 64-bit binary and on an Intel x86 host
+		 * default to the 64-bit assember.
+		 */
+		if(arch_flag.cputype == CPU_TYPE_I386)
+		    arch_flag = *get_arch_family_from_cputype(CPU_TYPE_X86_64);
+#endif /* __LP64__ */
+		arch_name = arch_flag.name;
+	    }
+	    else
+		fatal("unknown host architecture (can't determine which "
+		      "assembler to run)");
+	}
 	else{
 	    /*
 	     * Convert a possible machine specific architecture name to a
@@ -168,11 +227,10 @@ char **envp)
 	    }
 
 	}
-	as = makestr(prefix, LIB, arch_name, AS, NULL);
-
 	/*
 	 * If this assembler exist try to run it else print an error message.
 	 */
+	as = makestr(prefix, LIB, arch_name, AS, NULL);
 	if(access(as, F_OK) == 0){
 	    argv[0] = as;
 	    if(execute(argv, verbose))
@@ -188,34 +246,31 @@ char **envp)
 	    else
 		exit(1);
 	}
-	else{
-	    printf("%s: assembler (%s or %s) for architecture %s not "
-		   "installed\n", progname, as, as_local, arch_name);
-	    arch_flags = get_arch_flags();
-	    count = 0;
-	    for(i = 0; arch_flags[i].name != NULL; i++){
-		as = makestr(prefix, LIB, arch_flags[i].name, AS, NULL);
-		if(access(as, F_OK) == 0){
+	printf("%s: assembler (%s or %s) for architecture %s not installed\n",
+	       progname, as, as_local, arch_name);
+	arch_flags = get_arch_flags();
+	count = 0;
+	for(i = 0; arch_flags[i].name != NULL; i++){
+	    as = makestr(prefix, LIB, arch_flags[i].name, AS, NULL);
+	    if(access(as, F_OK) == 0){
+		if(count == 0)
+		    printf("Installed assemblers are:\n");
+		printf("%s for architecture %s\n", as, arch_flags[i].name);
+		count++;
+	    }
+	    else{
+		as_local = makestr(prefix, LOCALLIB, arch_flags[i].name, AS,
+				   NULL);
+		if(access(as_local, F_OK) == 0){
 		    if(count == 0)
 			printf("Installed assemblers are:\n");
-		    printf("%s for architecture %s\n", as, arch_flags[i].name);
+		    printf("%s for architecture %s\n", as_local,
+			   arch_flags[i].name);
 		    count++;
 		}
-		else{
-		    as_local = makestr(prefix, LOCALLIB, arch_flags[i].name,
-				       AS, NULL);
-		    if(access(as_local, F_OK) == 0){
-			if(count == 0)
-			    printf("Installed assemblers are:\n");
-			printf("%s for architecture %s\n", as_local,
-			       arch_flags[i].name);
-			count++;
-		    }
-		}
 	    }
-	    if(count == 0)
-		printf("%s: no assemblers installed\n", progname);
-	    exit(1);
 	}
-	return(0);
+	if(count == 0)
+	    printf("%s: no assemblers installed\n", progname);
+	exit(1);
 }

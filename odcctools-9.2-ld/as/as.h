@@ -20,6 +20,13 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
 #ifndef AS_H_
 #define AS_H_
 
+extern char *apple_flags;
+#define APPLE_INC_VERSION "Apple Inc version"
+/* apple_version is in apple_version.c which is created by the Makefile */
+extern char apple_version[];
+/* the GNU version is set in as.c */
+extern char version_string[];
+
 #define _(String) (String)
 #define ARRAY_SIZE(a) (sizeof (a) / sizeof ((a)[0]))
 
@@ -132,8 +139,25 @@ typedef enum {
 /* FROM line 285 */
 typedef int subsegT;
 
+/* Type of debugging information we should generate.  We currently support
+   stabs, ECOFF, and DWARF2.
 /* What subseg we are accessing now?  */
-extern subsegT now_subseg;
+   NOTE!  This means debug information about the assembly source code itself
+   and _not_ about possible debug information from a high-level language.
+   This is especially relevant to DWARF2, since the compiler may emit line
+   number directives that the assembler resolves.  */
+
+enum debug_info_type
+{
+  DEBUG_UNSPECIFIED,
+  DEBUG_NONE,
+  DEBUG_STABS,
+  DEBUG_ECOFF,
+  DEBUG_DWARF,
+  DEBUG_DWARF2
+};
+
+extern enum debug_info_type debug_type;
 
 /*
  * main program "as.c" (command arguments etc)

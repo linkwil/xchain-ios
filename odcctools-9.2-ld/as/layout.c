@@ -19,7 +19,7 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
 
 #include <stdlib.h>
 #include <string.h>
-#include "stuff/round.h"
+#include "stuff/rnd.h"
 #include "as.h"
 #include "sections.h"
 #include "frags.h"
@@ -30,11 +30,10 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
 #include "md.h"
 #include "obstack.h"
 #include "input-scrub.h"
+#include "dwarf2dbg.h"
 #if I386
 #include "i386.h"
 #endif
-
-int now_seg;
 
 #ifdef SPARC
 /* internal relocation types not to be emitted */
@@ -67,42 +66,49 @@ arm_force_relocation (struct fix * fixp);
   (0)
 #endif
 
+extern int arm_relax_frag (int nsect, fragS *fragp, int32_t stretch);
+
 #endif /* ARM */
 
 /* FROM write.c line 96 */
 #ifndef	MD_PCREL_FROM_SECTION
-#define MD_PCREL_FROM_SECTION(FIX, SEC) md_pcrel_from (FIX)
+extern int32_t md_pcrel_from_section(fixS * fixP);
+#define MD_PCREL_FROM_SECTION(FIX, SEC) md_pcrel_from_section (FIX)
 #endif
 
 static void fixup_section(
     fixS *fixP,
     int nsect);
-static void relax_section(
+#ifndef SPARC
+static int is_assembly_time_constant_subtraction_expression(
+    symbolS *add_symbolP,
+    int add_symbol_nsect,
+    symbolS *sub_symbolP,
+    int sub_symbol_nsect);
+#endif /* !defined(SPARC) */
+static int relax_section(
     struct frag *section_frag_root,
     int nsect);
 static relax_addressT relax_align(
     relax_addressT address,
-    long alignment);
+    uint32_t alignment);
+#ifndef ARM
 static int is_down_range(
     struct frag *f1,
     struct frag *f2);
+#endif /* !defined(ARM) */
 
 /*
- * layout_addresses() is called after all the assembly code has been read and
- * fragments, symbols and fixups have been created.  This routine sets the
- * address of the fragments and symbols.  Then it does the fixups of the frags
- * and prepares the fixes so relocation entries can be created from them.
+ * add_last_frags_to_sections() does what layout_addresses() does below about
+ * adding a last ".fill 0" frag to each section.  This is called by
+ * dwarf2_finish() allow get_frag_fix() in dwarf2dbg.c to work for the last
+ * fragment in a section.
  */
 void
-layout_addresses(
+add_last_frags_to_sections(
 void)
 {
     struct frchain *frchainP;
-    fragS *fragP;
-    relax_addressT slide, tmp;
-    symbolS *symbolP;
-    unsigned long nbytes, fill_size, repeat_expression, partial_bytes;
-    relax_stateT old_fr_type;
 
 	if(frchain_root == NULL)
 	    return;
@@ -128,7 +134,7 @@ void)
 	     * on a address that is aligned correctly for the engine that runs
 	     * the assembler.
 	     */
-	    obstack_finish(&frags);
+	    (void)obstack_finish(&frags);
 
 	    /*
 	     * Make a fresh frag for the last frag.
@@ -136,7 +142,69 @@ void)
 	    frag_now = (fragS *)obstack_alloc(&frags, SIZEOF_STRUCT_FRAG);
 	    memset(frag_now, '\0', SIZEOF_STRUCT_FRAG);
 	    frag_now->fr_next = NULL;
-	    obstack_finish(&frags);
+	    (void)obstack_finish(&frags);
+
+	    /*
+	     * Append the new frag to current frchain.
+	     */
+	    frchainP->frch_last->fr_next = frag_now;
+	    frchainP->frch_last = frag_now;
+	    frag_wane(frag_now);
+	}
+}
+
+/*
+ * layout_addresses() is called after all the assembly code has been read and
+ * fragments, symbols and fixups have been created.  This routine sets the
+ * address of the fragments and symbols.  Then it does the fixups of the frags
+ * and prepares the fixes so relocation entries can be created from them.
+ */
+void
+layout_addresses(
+void)
+{
+    struct frchain *frchainP;
+    fragS *fragP;
+    relax_addressT slide, tmp;
+    symbolS *symbolP;
+    uint32_t nbytes, fill_size, repeat_expression, partial_bytes, layout_pass;
+    uint32_t section_type;
+    relax_stateT old_fr_type;
+    int changed;
+
+	if(frchain_root == NULL)
+	    return;
+
+	/*
+	 * If there is any current frag close it off.
+	 */
+	if(frag_now != NULL && frag_now->fr_fix == 0){
+	    frag_now->fr_fix = obstack_next_free(&frags) -
+			       frag_now->fr_literal;
+	    frag_wane(frag_now);
+	}
+
+	/*
+	 * For every section, add a last ".fill 0" frag that will later be used
+	 * as the ending address of that section.
+	 */
+	for(frchainP = frchain_root; frchainP; frchainP = frchainP->frch_next){
+	    /*
+	     * We must do the obstack_finish(), so the next object we put on
+	     * obstack frags will not appear to start at the fr_literal of the
+	     * current frag.  Also, it ensures that the next object will begin
+	     * on a address that is aligned correctly for the engine that runs
+	     * the assembler.
+	     */
+	    (void)obstack_finish(&frags);
+
+	    /*
+	     * Make a fresh frag for the last frag.
+	     */
+	    frag_now = (fragS *)obstack_alloc(&frags, SIZEOF_STRUCT_FRAG);
+	    memset(frag_now, '\0', SIZEOF_STRUCT_FRAG);
+	    frag_now->fr_next = NULL;
+	    (void)obstack_finish(&frags);
 
 	    /*
 	     * Append the new frag to current frchain.
@@ -152,18 +220,47 @@ void)
 	 * relaxing each section.  That is all sections will start at address
 	 * zero and addresses of the frags in that section will increase from
 	 * there.
+	 *
+	 * The debug sections are done last as other section are needed to be
+	 * done first becase debug sections may have line numbers with .loc
+	 * directives in them and their sizes need to be set before processing
+	 * the line number sections.  We also do sections that have rs_leb128s
+	 * in them before debug sections but after other sections since they
+	 * are used for things like exception tables and they may be refering to
+	 * sections such that their sizes too must be known first.
 	 */
 	for(frchainP = frchain_root; frchainP; frchainP = frchainP->frch_next){
-	    if((frchainP->frch_section.flags & SECTION_TYPE) == S_ZEROFILL)
-		continue;
-	    /*
-	     * This is done so in case md_estimate_size_before_relax() (called
-	     * by relax_section) wants to make fixSs they are for this
-	     * section.
-	     */
-	    frchain_now = frchainP;
+	    if((frchainP->frch_section.flags & S_ATTR_DEBUG) == S_ATTR_DEBUG)
+		frchainP->layout_pass = 2;
+	    else if(frchainP->has_rs_leb128s == TRUE)
+		frchainP->layout_pass = 1;
+	    else
+		frchainP->layout_pass = 0;
+	}
+	for(layout_pass = 0; layout_pass < 3; layout_pass++){
+	    do{
+		changed = 0;
+		for(frchainP = frchain_root;
+		    frchainP;
+		    frchainP = frchainP->frch_next){
+		    if(frchainP->layout_pass != layout_pass)
+			continue;
+		    section_type = frchainP->frch_section.flags & SECTION_TYPE;
+		    if(section_type == S_ZEROFILL ||
+		       section_type == S_THREAD_LOCAL_ZEROFILL)
+			continue;
+		    /*
+		     * This is done so in case md_estimate_size_before_relax()
+		     * (called by relax_section) wants to make fixSs they are
+		     * for this section.
+		     */
+		    frchain_now = frchainP;
 
-	    relax_section(frchainP->frch_root, frchainP->frch_nsect);
+		    changed += relax_section(frchainP->frch_root,
+					    frchainP->frch_nsect);
+		}
+	    }
+	    while(changed != 0);
 	}
 
 	/*
@@ -173,9 +270,11 @@ void)
 	 */ 
 	slide = 0;
 	for(frchainP = frchain_root; frchainP; frchainP = frchainP->frch_next){
-	    if((frchainP->frch_section.flags & SECTION_TYPE) == S_ZEROFILL)
+	    section_type = frchainP->frch_section.flags & SECTION_TYPE;
+	    if(section_type == S_ZEROFILL ||
+	       section_type == S_THREAD_LOCAL_ZEROFILL)
 		continue;
-	    slide = round(slide, 1 << frchainP->frch_section.align);
+	    slide = rnd(slide, 1 << frchainP->frch_section.align);
 	    tmp = frchainP->frch_last->fr_address;
 	    if(slide != 0){
 		for(fragP = frchainP->frch_root; fragP; fragP = fragP->fr_next){
@@ -192,9 +291,11 @@ void)
 	 * is that section numbers do not end up in address order.
 	 */
 	for(frchainP = frchain_root; frchainP; frchainP = frchainP->frch_next){
-	    if((frchainP->frch_section.flags & SECTION_TYPE) != S_ZEROFILL)
+	    section_type = frchainP->frch_section.flags & SECTION_TYPE;
+	    if(section_type != S_ZEROFILL &&
+	       section_type != S_THREAD_LOCAL_ZEROFILL)
 		continue;
-	    slide = round(slide, 1 << frchainP->frch_section.align);
+	    slide = rnd(slide, 1 << frchainP->frch_section.align);
 
 	    tmp = frchainP->frch_root->fr_address;
 	    frchainP->frch_root->fr_address = slide;
@@ -249,7 +350,7 @@ void)
 			     fragP->fr_address -
 			     fragP->fr_fix;
 		    if(nbytes < 0){
-			as_warn("rs_org invalid, dot past value by %ld bytes",
+			as_warn("rs_org invalid, dot past value by %d bytes",
 				nbytes);
 			nbytes = 0;
 		    }
@@ -322,6 +423,49 @@ void)
 		    frag_wane(fragP);
 		    break;
 
+		case rs_dwarf2dbg:
+		    dwarf2dbg_convert_frag(fragP);
+		    break;
+
+		case rs_leb128:
+		  {
+		    int size;
+#ifdef OLD
+		    valueT value = S_GET_VALUE (fragP->fr_symbol);
+#else
+		    valueT value;
+  		      expressionS *expression;
+  		
+		      if(fragP->fr_symbol->expression != NULL){
+			expression =
+			  (expressionS *)fragP->fr_symbol->expression;
+			value = 0;
+			if(expression->X_add_symbol != NULL)
+			    value += expression->X_add_symbol->sy_nlist.n_value;
+			if(expression->X_subtract_symbol != NULL)
+			   value -= 
+			     expression->X_subtract_symbol->sy_nlist.n_value;
+			value += expression->X_add_number;
+		      }
+		      else{
+			value = fragP->fr_symbol->sy_nlist.n_value +
+				fragP->fr_address;
+		      }
+#endif
+
+		    size = output_leb128 (fragP->fr_literal + fragP->fr_fix,
+					  value,
+					  fragP->fr_subtype);
+	       
+		    fragP->fr_fix += size;
+		    fragP->fr_type = rs_fill;
+		    fragP->fr_var = 0;
+		    fragP->fr_offset = 0;
+		    fragP->fr_symbol = NULL; 
+		  }
+		  break;
+
+
 		default:
 		    BAD_CASE(fragP->fr_type);
 		    break;
@@ -352,10 +496,10 @@ int nsect)
 {
     symbolS *add_symbolP;
     symbolS *sub_symbolP;
-    long value;
+    signed_expr_t value;
     int size;
     char *place;
-    long where;
+    int32_t where;
     char pcrel;
     fragS *fragP;
     int	add_symbol_N_TYPE;
@@ -399,7 +543,6 @@ int nsect)
 	    /* If the symbol is defined in this file, the linker won't set the
 	       low-order bit for a Thumb symbol, so we have to do it here.  */
 	    if(add_symbolP != NULL && add_symbolP->sy_desc & N_ARM_THUMB_DEF &&
-	       !(add_symbolP->sy_desc & N_WEAK_DEF) &&
 	       !(sub_symbolP != NULL && sub_symbolP->sy_desc & N_ARM_THUMB_DEF) &&
 	       !pcrel){
 	        value |= 1;
@@ -452,6 +595,20 @@ int nsect)
 		 */
 		else if((sub_symbolP->sy_type & N_TYPE) == N_SECT &&
 		        (add_symbolP->sy_type & N_TYPE) == N_SECT){
+#if defined(I386) && !defined(ARCH64)
+		    /*
+		     * For 'symbol@TLVP - subtract_symbol' type relocations the
+		     * subtract_symbol value is stored in the contents of the
+		     * item to be relocated.
+		     */
+		    if(fixP->fx_r_type == GENERIC_RELOC_TLV){
+			value += fixP->fx_frag->fr_address + where +
+				 fixP->fx_size - sub_symbolP->sy_value;
+			fixP->fx_subsy = NULL; /* no SECTDIFF reloc entry */
+			fixP->fx_pcrel = TRUE; /* force pcrel */
+			goto down;
+		    }
+#endif
 		    /*
 		     * We are use the new features that are incompatible with
 		     * 3.2 then just calculate the value and let this create a
@@ -474,7 +631,7 @@ int nsect)
 			}
 			else{
 			    as_warn("Can't emit reloc type %u {-symbol \"%s\"} "
-			            "@ file address %ld (mode?).",
+			            "@ file address %llu (mode?).",
 				    fixP->fx_r_type, sub_symbolP->sy_name,
 				    fragP->fr_address + where);
 			}
@@ -488,13 +645,60 @@ int nsect)
 			 * the difference between the two symbols because
 			 * that's handled by the subtractor/vanilla reloc pair.
 			 */
-		    value += add_symbolP->sy_value - sub_symbolP->sy_value;
+		    value += add_symbolP->sy_value;
+		    value -= sub_symbolP->sy_value;
+#else
+		    /*
+		     * But for x86_64 expressions in the debug section must
+		     * be the actual value of the expression.
+		     */
+		    if(is_section_debug(nsect)){
+			value += add_symbolP->sy_value;
+			value -= sub_symbolP->sy_value;
+		    }
 #endif
 		    sub_symbol_nsect = sub_symbolP->sy_other;
+		    /*
+		     * If we have the special assembly time constant expression
+		     * of the difference of two symbols defined in the same
+		     * section then divided by exactly 2 adjust the value and
+		     * make sure these symbols will produce an assembly time
+		     * constant.
+		     */
+		    if(fixP->fx_sectdiff_divide_by_two == 1){
+			value = value / 2;
+			if(is_assembly_time_constant_subtraction_expression(
+				add_symbolP, add_symbol_nsect,
+				sub_symbolP, sub_symbol_nsect) == TRUE){
+			    fixP->fx_addsy = NULL; /* no relocation entry */
+			    goto down;
+			}
+			else{
+			    layout_line = fixP->line;
+			    layout_file = fixP->file;
+			    as_warn("section difference divide by two "
+				    "expression, \"%s\" minus \"%s\" divide by "
+				    "2 will not produce an assembly time "
+				    "constant", add_symbolP->sy_name,
+				    sub_symbolP->sy_name);
+			}
+		    }
 		    if(is_end_section_address(add_symbol_nsect,
 					      add_symbolP->sy_value) ||
 		       is_end_section_address(sub_symbol_nsect,
 					      sub_symbolP->sy_value)){
+			if(is_assembly_time_constant_subtraction_expression(
+				add_symbolP, add_symbol_nsect,
+				sub_symbolP, sub_symbol_nsect) == TRUE){
+			    fixP->fx_addsy = NULL; /* no relocation entry */
+			    goto down;
+			}
+			if(is_section_debug(nsect) &&
+	   		   strcmp(add_symbolP->sy_name, FAKE_LABEL_NAME) == 0 &&
+	   		   strcmp(sub_symbolP->sy_name, FAKE_LABEL_NAME) == 0){
+			    fixP->fx_addsy = NULL; /* no relocation entry */
+			    goto down;
+			}
 			layout_line = fixP->line;
 			layout_file = fixP->file;
 			as_warn("section difference relocatable subtraction "
@@ -521,6 +725,19 @@ int nsect)
 		    value -= sub_symbolP->sy_value;
 		    fixP->fx_subsy = NULL; /* no SECTDIFF relocation entry */
 		}
+#if defined(I386) && !defined(ARCH64)
+		/*
+		 * For 'symbol@TLVP - subtract_symbol' type relocations the
+		 * subtract_symbol value is stored in the contents of the item
+		 * to be relocated.
+		 */
+		else if(fixP->fx_r_type == GENERIC_RELOC_TLV){
+		    value += fixP->fx_frag->fr_address + where + fixP->fx_size -
+			     sub_symbolP->sy_value;
+		    fixP->fx_subsy = NULL; /* no SECTDIFF relocation entry */
+		    fixP->fx_pcrel = TRUE; /* force pcrel */
+		}
+#endif
 		/*
 		 * At this point we have something we can't generate a
 		 * relocation entry for (two undefined symbols, etc.).
@@ -568,7 +785,7 @@ int nsect)
 		    value += add_symbolP->sy_value;
 #ifdef ARM
 		    /* FROM write.c line 2667 */
-		    value -= where + fragP->fr_address;
+		    value -= MD_PCREL_FROM_SECTION (fixP, nsect);
 #else
 		    value -= size + where + fragP->fr_address;
 #endif
@@ -623,9 +840,15 @@ int nsect)
 			    is_local_symbol(add_symbolP) &&
 			    !is_section_cstring_literals(add_symbol_nsect)) )
 #else
-			if((add_symbolP->sy_type & N_EXT) != N_EXT ||
-			   add_symbol_N_TYPE != N_SECT ||
-			   !is_section_coalesced(add_symbol_nsect))
+			if(((add_symbolP->sy_type & N_EXT) != N_EXT ||
+			    add_symbol_N_TYPE != N_SECT ||
+			    !is_section_coalesced(add_symbol_nsect)) &&
+			   (add_symbolP->sy_desc & N_WEAK_DEF) != N_WEAK_DEF
+#if defined(I386) && !defined(ARCH64)
+			   &&
+			   fixP->fx_r_type != GENERIC_RELOC_TLV
+#endif
+			  )
 #endif
 			    value += add_symbolP->sy_value;
 			break;
@@ -662,10 +885,15 @@ down:
 
 	    if((size == 1 && (value & 0xffffff00) &&
 			    ((value & 0xffffff80) != 0xffffff80)) ||
-	       (size == 2 && (value & 0xffff8000) &&
-			    ((value & 0xffff8000) != 0xffff8000)))
-		as_bad("Fixup of %ld too large for field width of %d",
+	       (size == 2 && (value & 0xffff0000) &&
+			    ((value & 0xffff8000) != 0xffff8000))){
+		layout_line = fixP->line;
+		layout_file = fixP->file;
+		as_bad("Fixup of %lld too large for field width of %d",
 			value, size);
+		layout_line = 0;
+		layout_file = NULL;
+	    }
 
 	    /*
 	     * Now place the fix expression's value in the place for the size.
@@ -702,6 +930,134 @@ down:
 	}
 }
 
+#ifndef SPARC
+/*
+ * is_assembly_time_constant_subtraction_expression() is passed the symbols and
+ * section numbers of a subtraction expression invloving symbols both defined in
+ * some section.  If the subtraction expression is an assembly time constant
+ * value then this returns 1 (TRUE) else this returns 0 (FALSE).
+ *
+ * Since the static link editor can break apart a section this routine can only
+ * return TRUE when it is known for sure these symbols will not be moved apart
+ * from each other.  So this is an assembly time constant subtraction expression
+ * if the following are all true:
+ * - the expression's symbols are assembly temporary symbols (starting with 'L')
+ * - assembly temporary symbol are not being saved (no -L flag)
+ * - the two symbols are in the same section
+ * - the section is a regular section or coalesced section (non-literal section)
+ * - there are no non-assembly temporary symbols defined between two symbols of
+ *   the expression.  For example if the assembly code is:
+ *	L1: nop
+ *	foo: nop
+ *	L2: nop
+ *   the expression is L1-L2 is not an assembly time constant because the block
+ *   of code after foo (including the address of L2) could be link edited away
+ *   from the block of code with L1.
+ */
+static
+int
+is_assembly_time_constant_subtraction_expression(
+symbolS *add_symbolP,
+int add_symbol_nsect,
+symbolS *sub_symbolP,
+int sub_symbol_nsect)
+{
+    struct frchain *frchainP;
+    uint32_t section_type, section_attributes;
+    symbolS *prev_symbol;
+    int non_assembly_temporary_symbol;
+
+	/* see if both symbols are assembly temporary symbols */
+	if(add_symbolP->sy_name == NULL || add_symbolP->sy_name[0] != 'L' ||
+	   sub_symbolP->sy_name == NULL || sub_symbolP->sy_name[0] != 'L')
+	    return(0);
+
+	/* make sure we are not saving assembly temporary symbols */
+	if(flagseen[(int)'L'])
+	    return(0);
+
+	/* make sure the two symbols are in the same section */
+	if(add_symbol_nsect != sub_symbol_nsect)
+	    return(0);
+
+	/* make sure the section is a regular or coalesced section */
+	section_attributes = 0;
+	for(frchainP = frchain_root; frchainP; frchainP = frchainP->frch_next){
+	    if(frchainP->frch_nsect == add_symbol_nsect){
+		section_type = frchainP->frch_section.flags & SECTION_TYPE;
+		section_attributes = frchainP->frch_section.flags &
+				     SECTION_ATTRIBUTES;
+		if(section_type == S_REGULAR || section_type == S_COALESCED)
+		    break;
+		else
+		    return(0);
+	    }
+	}
+
+	/*
+	 * See if we can find the chain of symbols from the add_symbolP through
+	 * its previous symbols to the sub_symbolP.  And check for non assembler
+	 * temporary symbols along that chain.
+	 */
+	non_assembly_temporary_symbol = 0;
+	for(prev_symbol = add_symbolP->sy_prev_by_index;
+	    prev_symbol != NULL;
+	    prev_symbol = prev_symbol->sy_prev_by_index){
+	    if((prev_symbol->sy_type & N_SECT) == N_SECT &&
+	       (prev_symbol->sy_type & N_STAB) == 0 &&
+		prev_symbol->sy_other == add_symbol_nsect){
+		if(prev_symbol == sub_symbolP){
+		    if(non_assembly_temporary_symbol == 0)
+			return(1);
+		    else
+			return(0);
+		}
+		if(prev_symbol->sy_name != NULL &&
+		   prev_symbol->sy_name[0] != 'L')
+		    non_assembly_temporary_symbol = 1;
+	    }
+	}
+
+	/*
+	 * Couldn't find the chain above, so now try we can find the chain of
+	 * symbols from the sub_symbolP through its previous symbols to the
+	 * add_symbolP.  And check for non assembler temporary symbols along
+	 * that chain.
+	 */
+	non_assembly_temporary_symbol = 0;
+	for(prev_symbol = sub_symbolP->sy_prev_by_index;
+	    prev_symbol != NULL;
+	    prev_symbol = prev_symbol->sy_prev_by_index){
+	    if((prev_symbol->sy_type & N_SECT) == N_SECT &&
+	       (prev_symbol->sy_type & N_STAB) == 0 &&
+		prev_symbol->sy_other == sub_symbol_nsect){
+		if(prev_symbol == add_symbolP){
+		    if(non_assembly_temporary_symbol == 0)
+			return(1);
+		    else
+			return(0);
+		}
+		if(prev_symbol->sy_name != NULL &&
+		   prev_symbol->sy_name[0] != 'L')
+		    non_assembly_temporary_symbol = 1;
+	    }
+	}
+
+	/*
+	 * It is possible that this expression is coming from a dwarf section
+	 * made from .file and .loc directives.  If so both symbols would have
+	 * the FAKE_LABEL_NAME and the section_type would be
+	 * and in this case the then the expression is an assembly time
+	 * constant.
+	 */
+	if((section_attributes & S_ATTR_DEBUG) == S_ATTR_DEBUG &&
+	   strcmp(add_symbolP->sy_name, FAKE_LABEL_NAME) == 0 &&
+	   strcmp(sub_symbolP->sy_name, FAKE_LABEL_NAME) == 0)
+	    return(1);
+
+	return(0);
+}
+#endif /* !defined(SPARC) */
 
 /*
  * relax_section() here we set the fr_address values in the frags.
@@ -711,7 +1067,7 @@ down:
  * are know then they can be slid to their final address.
  */
 static
-void
+int
 relax_section(
 struct frag *frag_root,
 int nsect)
@@ -719,30 +1075,34 @@ int nsect)
     struct frag *fragP;
     relax_addressT address;
 
-    long stretch; /* May be any size, 0 or negative. */
-		  /* Cumulative number of addresses we have */
-		  /* relaxed this pass. */
-		  /* We may have relaxed more than one address. */
-    long stretched;  /* Have we stretched on this pass? */
+    int32_t stretch; /* May be any size, 0 or negative. */
+		     /* Cumulative number of addresses we have */
+		     /* relaxed this pass. */
+		     /* We may have relaxed more than one address. */
+    int32_t stretched;  /* Have we stretched on this pass? */
 		    /* This is 'cuz stretch may be zero, when,
 		       in fact some piece of code grew, and
 		       another shrank.  If a branch instruction
 		       doesn't fit anymore, we need another pass */
 
+#ifndef ARM
     const relax_typeS *this_type;
     const relax_typeS *start_type;
     relax_substateT next_state;
     relax_substateT this_state;
+    int32_t aim;
+#endif /* !defined(ARM) */
 
-    long growth;
-    unsigned long was_address;
-    long offset;
+    int32_t growth;
+    uint32_t was_address;
+    int32_t offset;
     symbolS *symbolP;
-    long target;
-    long after;
-    long aim;
-    unsigned long oldoff, newoff;
+    int32_t target;
+    int32_t after;
+    uint32_t oldoff, newoff;
+    int ret;
 
+	ret = 0;
 	growth = 0;
 
 	/*
@@ -750,6 +1110,9 @@ int nsect)
 	 */
 	address = 0;
 	for(fragP = frag_root; fragP != NULL; fragP = fragP->fr_next){
+#ifdef ARM
+            fragP->relax_marker = 0;
+#endif /* ARM */
 	    fragP->fr_address = address;
 	    address += fragP->fr_fix;
 	    switch(fragP->fr_type){
@@ -767,12 +1130,12 @@ int nsect)
 		 * section's alignment.
 		 */
 		if(fragP->fr_subtype != 0){
-		    if(offset > (long)fragP->fr_subtype){
+		    if(offset > (int32_t)fragP->fr_subtype){
 			offset = 0;
 		    }
 		    else{
 			if(frchain_now->frch_section.align <
-			   (unsigned long)fragP->fr_offset)
+			   (uint32_t)fragP->fr_offset)
 			    frchain_now->frch_section.align = fragP->fr_offset;
 		    }
 		}
@@ -788,6 +1151,16 @@ int nsect)
 	    case rs_machine_dependent:
 		address += md_estimate_size_before_relax(fragP, nsect);
 		break;
+
+	    case rs_dwarf2dbg:
+		address += dwarf2dbg_estimate_size_before_relax(fragP);
+		break;
+
+	    case rs_leb128:
+	      /* Initial guess is always 1; doing otherwise can result in
+		 stable solutions that are larger than the minimum.  */
+	      address += fragP->fr_offset = 1;
+	      break;
 
 	    default:
 		BAD_CASE(fragP->fr_type);
@@ -806,6 +1179,9 @@ int nsect)
 	    stretch = 0;
 	    stretched = 0;
 	    for(fragP = frag_root; fragP != NULL; fragP = fragP->fr_next){
+#ifdef ARM
+                fragP->relax_marker ^= 1;
+#endif /* ARM */
 		was_address = fragP->fr_address;
 		fragP->fr_address += stretch;
 		address = fragP->fr_address;
@@ -855,6 +1231,9 @@ int nsect)
 		    break;
 
 		case rs_machine_dependent:
+#ifdef ARM
+		    growth = arm_relax_frag(nsect, fragP, stretch);
+#else /* !defined(ARM) */
 		    this_state = fragP->fr_subtype;
 		    this_type = md_relax_table + this_state;
 		    start_type = this_type;
@@ -906,6 +1285,45 @@ int nsect)
 		    }
 		    if((growth = this_type->rlx_length -start_type->rlx_length))
 			  fragP->fr_subtype = this_state;
+#endif /* !defined(ARM) */
+		    break;
+		  case rs_dwarf2dbg:
+		      growth = dwarf2dbg_relax_frag(fragP);
+		      break;
+
+		  case rs_leb128:
+		    {
+		      valueT value;
+		      offsetT size;
+#ifdef OLD
+		      value = resolve_symbol_value (fragP->fr_symbol);
+#else
+  		      expressionS *expression;
+  		
+		      if(fragP->fr_symbol->expression != NULL){
+			expression =
+			  (expressionS *)fragP->fr_symbol->expression;
+			value = 0;
+			if(expression->X_add_symbol != NULL)
+			    value +=
+			     (expression->X_add_symbol->sy_nlist.n_value +
+			      expression->X_add_symbol->sy_frag->fr_address);
+			if(expression->X_subtract_symbol != NULL)
+			   value -= 
+			     (expression->X_subtract_symbol->sy_nlist.n_value +
+			      expression->X_subtract_symbol->
+							   sy_frag->fr_address);
+			value += expression->X_add_number;
+		      }
+		      else{
+			value = fragP->fr_symbol->sy_nlist.n_value +
+				fragP->fr_address;
+		      }
+#endif
+		      size = sizeof_leb128 (value, fragP->fr_subtype);
+		      growth = size - fragP->fr_offset;
+		      fragP->fr_offset = size;
+		    }
 		    break;
 
 		  default:
@@ -924,6 +1342,14 @@ int nsect)
 	 * are correct, relative to their own section.  We have made all the
 	 * fixS for this section that will be made.
 	 */
+
+	for(fragP = frag_root; fragP != NULL; fragP = fragP->fr_next){
+	    if(fragP->last_fr_address != fragP->fr_address){
+		fragP->last_fr_address = fragP->fr_address;
+		ret = 1;
+	    }
+	}
+	return(ret);
 }
 
 /*
@@ -934,7 +1360,7 @@ static
 relax_addressT		/* How many addresses does the .align take? */
 relax_align(
 relax_addressT address, /* Address now. */
-long alignment)		/* Alignment (binary). */
+uint32_t alignment)		/* Alignment (binary). */
 {
     relax_addressT mask;
     relax_addressT new_address;
@@ -944,6 +1370,7 @@ long alignment)		/* Alignment (binary). */
 	return(new_address - address);
 }
 
+#ifndef ARM
 /*
  * is_down_range() is used in relax_section() to determine it one fragment is
  * after another to know if it will also be moved if the first is moved.
@@ -961,3 +1388,4 @@ struct frag *f2)
 	}
 	return(0);
 }
+#endif /* !defined(ARM) */

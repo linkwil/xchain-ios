@@ -43,8 +43,9 @@ extern const char extra_symbol_chars[];
 #define ADDR_PREFIX	2
 #define DATA_PREFIX	3
 #define SEG_PREFIX	4
-#define REX_PREFIX	5       /* must come last.  */
-#define MAX_PREFIXES	6	/* max prefixes per opcode */
+#define MAN_PREFIX	5	/* 0xf2,0xf3,etc "mandatory" prefix, not REPs */
+#define REX_PREFIX	6       /* must come last.  */
+#define MAX_PREFIXES	7	/* max prefixes per opcode */
 
 /* we define the syntax here (modulo base,index,scale syntax) */
 #define REGISTER_PREFIX '%'
@@ -366,7 +367,7 @@ void i386_validate_fix PARAMS ((struct fix *));
 
 #ifdef NeXT_MOD
 #if ARCH64
-long x86_64_fixup_symbol PARAMS ((fixS *, int, struct symbol **));
+int32_t x86_64_fixup_symbol PARAMS ((fixS *, int, struct symbol **));
 #define TC_FIXUP_SYMBOL(FIX, SECT, SYM) x86_64_fixup_symbol(FIX, SECT, SYM)
 #endif
 #endif

@@ -2,7 +2,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <sys/file.h>
-#include <sys/stat.h>
+#include <libc.h>
 #include <mach/mach.h>
 #include "arch64_32.h"
 #include "stuff/openstep_mach.h"
@@ -27,11 +27,12 @@
 #endif
 #ifdef ARM
 #include <mach-o/arm/reloc.h>
+#include "arm_reloc.h"
 #endif
 #if defined(I386) && defined(ARCH64)
 #include <mach-o/x86_64/reloc.h>
 #endif
-#include "stuff/round.h"
+#include "stuff/rnd.h"
 #include "stuff/bytesex.h"
 #include "stuff/errors.h"
 #include "as.h"
@@ -97,32 +98,32 @@
  *	strings for local symbols
  */
 /* index to and number of local symbols */
-static unsigned long ilocalsym = 0;
-static unsigned long nlocalsym = 0;
+static uint32_t ilocalsym = 0;
+static uint32_t nlocalsym = 0;
 /* index to, number of and array of sorted externally defined symbols */
-static unsigned long iextdefsym = 0;
-static unsigned long nextdefsym = 0;
+static uint32_t iextdefsym = 0;
+static uint32_t nextdefsym = 0;
 static symbolS **extdefsyms = NULL;
 /* index to, number of and array of sorted undefined symbols */
-static unsigned long iundefsym = 0;
-static unsigned long nundefsym = 0;
+static uint32_t iundefsym = 0;
+static uint32_t nundefsym = 0;
 static symbolS **undefsyms = NULL;
 
-static unsigned long layout_indirect_symbols(
+static uint32_t layout_indirect_symbols(
      void);
 static void layout_symbols(
-    long *symbol_number,
-    long *string_byte_count);
+    int32_t *symbol_number,
+    int32_t *string_byte_count);
 static int qsort_compare(
     const symbolS **sym1,
     const symbolS **sym2);
-static unsigned long nrelocs_for_fix(
+static uint32_t nrelocs_for_fix(
     struct fix *fixP);
-static unsigned long fix_to_relocation_entries(
+static uint32_t fix_to_relocation_entries(
     struct fix *fixP,
-    unsigned long sect_addr,
+    uint64_t sect_addr,
     struct relocation_info *riP,
-    unsigned long debug_section);
+    uint32_t debug_section);
 #ifdef I860
 static void
     I860_tweeks(void);
@@ -140,13 +141,13 @@ char *out_file_name)
     segment_command_t		reloc_segment;
     struct symtab_command	symbol_table;
     struct dysymtab_command	dynamic_symbol_table;
-    unsigned long		section_type;
+    uint32_t			section_type;
     uint32_t			*indirect_symbols;
     isymbolS			*isymbolP;
-    unsigned long		i, j, nsects, nsyms, strsize, nindirectsyms;
+    uint32_t			i, j, nsects, nsyms, strsize, nindirectsyms;
 
     /* locals to fill in section struct fields */
-    unsigned long offset, zero;
+    uint32_t offset, zero;
 
     /* The GAS data structures */
     struct frchain *frchainP, *p;
@@ -154,19 +155,19 @@ char *out_file_name)
     struct frag *fragP;
     struct fix *fixP;
 
-    unsigned long output_size;
+    uint32_t output_size;
     char *output_addr;
     kern_return_t r;
 
     enum byte_sex host_byte_sex;
-    unsigned long reloff, nrelocs;
-    long count;
+    uint32_t reloff, nrelocs;
+    int32_t count;
     char *fill_literal;
-    long fill_size;
-    long num_bytes;
+    int32_t fill_size;
+    int32_t num_bytes;
     char *symbol_name;
     int fd;
-    unsigned long local;
+    uint32_t local;
     struct stat stat_buf;
 
 #ifdef I860
@@ -205,7 +206,7 @@ char *out_file_name)
 	 */
 	nsyms = 0;
 	strsize = 0;
-	layout_symbols((long *)&nsyms, (long *)&strsize);
+	layout_symbols((int32_t *)&nsyms, (int32_t *)&strsize);
 
 	/* fill in the Mach-O header */
 	header.magic = MH_MAGIC_VALUE;
@@ -265,11 +266,16 @@ char *out_file_name)
 	 * zerofill section or the last not-zerofill section.
 	 */
 	for(frchainP = frchain_root; frchainP; frchainP = frchainP->frch_next){
-	    if((frchainP->frch_section.flags & SECTION_TYPE) == S_ZEROFILL)
+	    section_type = frchainP->frch_section.flags & SECTION_TYPE;
+	    if(section_type == S_ZEROFILL ||
+	       section_type == S_THREAD_LOCAL_ZEROFILL)
 		continue;
-	    for(p = frchainP->frch_next; p != NULL; p = p->frch_next)
-		if((p->frch_section.flags & SECTION_TYPE) != S_ZEROFILL)
+	    for(p = frchainP->frch_next; p != NULL; p = p->frch_next){
+		section_type = p->frch_section.flags & SECTION_TYPE;
+		if(section_type != S_ZEROFILL &&
+		   section_type != S_THREAD_LOCAL_ZEROFILL)
 		    break;
+	    }
 	    if(p != NULL)
 		i = p->frch_section.addr - frchainP->frch_section.addr;
 	    else
@@ -281,12 +287,14 @@ char *out_file_name)
 				   frchainP->frch_section.size;
 	}
 	for(frchainP = frchain_root; frchainP; frchainP = frchainP->frch_next){
-	    if((frchainP->frch_section.flags & SECTION_TYPE) != S_ZEROFILL)
+	    section_type = frchainP->frch_section.flags & SECTION_TYPE;
+	    if(section_type != S_ZEROFILL &&
+	       section_type != S_THREAD_LOCAL_ZEROFILL)
 		continue;
 	    reloc_segment.vmsize = frchainP->frch_section.addr +
 				   frchainP->frch_section.size;
 	}
-	offset = round(offset, sizeof(long));
+	offset = rnd(offset, sizeof(int32_t));
 
 	/*
 	 * Count the number of relocation entries for each section.
@@ -301,7 +309,7 @@ char *out_file_name)
 	/*
 	 * Fill in the offset to the relocation entries of the sections.
 	 */
-	offset = round(offset, sizeof(long));
+	offset = rnd(offset, sizeof(int32_t));
 	reloff = offset;
 	nrelocs = 0;
 	for(frchainP = frchain_root; frchainP; frchainP = frchainP->frch_next){
@@ -333,7 +341,7 @@ char *out_file_name)
 	    else{
 		dynamic_symbol_table.nindirectsyms = nindirectsyms;
 		dynamic_symbol_table.indirectsymoff = offset;
-		offset += nindirectsyms * sizeof(unsigned long);
+		offset += nindirectsyms * sizeof(uint32_t);
 	    }
 
 	    dynamic_symbol_table.tocoff = 0;
@@ -363,8 +371,8 @@ char *out_file_name)
 	    symbol_table.stroff = 0;
 	else
 	    symbol_table.stroff = offset;
-	symbol_table.strsize = round(strsize, sizeof(unsigned long));
-	offset += round(strsize, sizeof(unsigned long));
+	symbol_table.strsize = rnd(strsize, sizeof(uint32_t));
+	offset += rnd(strsize, sizeof(uint32_t));
 
 	/*
 	 * The second group of things to do is now with the size of everything
@@ -378,7 +386,7 @@ char *out_file_name)
 	output_size = offset;
 	if((r = vm_allocate(mach_task_self(), (vm_address_t *)&output_addr,
 			    output_size, TRUE)) != KERN_SUCCESS)
-	    as_fatal("can't vm_allocate() buffer for output file of size %lu",
+	    as_fatal("can't vm_allocate() buffer for output file of size %u",
 		     output_size);
 
 	/* put the headers in the output file's buffer */
@@ -563,14 +571,14 @@ char *out_file_name)
 				N_TYPE) == N_ABS)
 				local |= INDIRECT_SYMBOL_ABS;
 			    memcpy(output_addr + offset, (char *)(&local),
-	   			   sizeof(unsigned long));
+	   			   sizeof(uint32_t));
 			}
 			else{
 			    memcpy(output_addr + offset,
 				   (char *)(&isymbolP->isy_symbol->sy_number),
-				   sizeof(unsigned long));
+				   sizeof(uint32_t));
 			}
-			offset += sizeof(unsigned long);
+			offset += sizeof(uint32_t);
 		    }
 		}
 	    }
@@ -639,11 +647,11 @@ char *out_file_name)
  * pointers.  It returns the total count of indirect symbol table entries.
  */
 static
-unsigned long
+uint32_t
 layout_indirect_symbols(void)
 {
     struct frchain *frchainP;
-    unsigned long section_type, total, count, stride;
+    uint32_t section_type, total, count, stride;
     isymbolS *isymbolP;
     symbolS *symbolP;
 
@@ -841,10 +849,10 @@ set_BINCL_checksums()
 static
 void
 layout_symbols(
-long *symbol_number,
-long *string_byte_count)
+int32_t *symbol_number,
+int32_t *string_byte_count)
 {
-    unsigned long i, j;
+    uint32_t i, j;
     symbolS *symbolP;
     symbolS **symbolPP;
     char *name;
@@ -952,12 +960,6 @@ long *string_byte_count)
 		    as_bad("Undefined symbol: %s can't be a weak_definition",
 			   symbolP->sy_name);
 		}
-		else if((symbolP->sy_type & N_TYPE) != N_SECT ||
-			is_section_coalesced(symbolP->sy_other) == FALSE){
-		  as_bad("symbol: %s can't be a weak_definition (currently "
-		         "only supported in section of type coalesced)",
-			 symbolP->sy_name);
-		}
 	    }
 	}
 
@@ -1029,14 +1031,14 @@ const symbolS **sym2)
  * specified fix structure.
  */
 static
-unsigned long
+uint32_t
 nrelocs_for_fix(
 struct fix *fixP)
 {
 	/*
 	 * If fx_addsy is NULL then this fix needs no relocation entry.
 	 */
-	if(fixP->fx_addsy == NULL || fixP->fx_done)
+	if(fixP->fx_addsy == NULL)
 	    return(0);
 
 	/*
@@ -1081,6 +1083,13 @@ struct fix *fixP)
 	   fixP->fx_r_type == SPARC_RELOC_LO10)
 	    return(2);
 #endif
+#ifdef ARM
+	if(fixP->fx_r_type == ARM_RELOC_LO16 ||
+	   fixP->fx_r_type == ARM_RELOC_HI16 ||
+	   fixP->fx_r_type == ARM_THUMB_RELOC_LO16 ||
+	   fixP->fx_r_type == ARM_THUMB_RELOC_HI16)
+	    return(2);
+#endif
 	return(1);
 }
 
@@ -1091,25 +1100,25 @@ struct fix *fixP)
  * placed at riP.
  */
 static
-unsigned long
+uint32_t
 fix_to_relocation_entries(
 struct fix *fixP,
-unsigned long sect_addr,
+uint64_t sect_addr,
 struct relocation_info *riP,
-unsigned long debug_section)
+uint32_t debug_section)
 {
     struct symbol *symbolP;
-    unsigned long count;
+    uint32_t count;
     struct scattered_relocation_info sri;
-    unsigned long sectdiff;
+    uint32_t sectdiff;
 #ifdef HPPA
-    unsigned long left21, right14;
+    uint32_t left21, right14;
 #endif
 
 	/*
 	 * If fx_addsy is NULL then this fix needs no relocation entry.
 	 */
-	if(fixP->fx_addsy == NULL || fixP->fx_done)
+	if(fixP->fx_addsy == NULL)
 	    return(0);
 
 #ifdef TC_VALIDATE_FIX
@@ -1119,6 +1128,16 @@ unsigned long debug_section)
 	memset(riP, '\0', sizeof(struct relocation_info));
 	symbolP = fixP->fx_addsy;
 
+#ifdef ARM
+	/* see arm_reloc.h for the encodings in the low 2 bits */
+	if(fixP->fx_r_type == ARM_RELOC_LO16 ||
+	   fixP->fx_r_type == ARM_RELOC_HI16 ||
+	   fixP->fx_r_type == ARM_THUMB_RELOC_LO16 ||
+	   fixP->fx_r_type == ARM_THUMB_RELOC_HI16){
+	    riP->r_length = fixP->fx_r_type & 0x3;
+	}
+	else
+#endif
 	switch(fixP->fx_size){
 	    case 1:
 		riP->r_length = 0;
@@ -1148,10 +1167,19 @@ unsigned long debug_section)
 	riP->r_pcrel = fixP->fx_pcrel;
 	riP->r_address = fixP->fx_frag->fr_address + fixP->fx_where -
 			 sect_addr;
+#ifdef ARM
+	if(fixP->fx_r_type == ARM_RELOC_LO16 ||
+	   fixP->fx_r_type == ARM_RELOC_HI16 ||
+	   fixP->fx_r_type == ARM_THUMB_RELOC_LO16 ||
+	   fixP->fx_r_type == ARM_THUMB_RELOC_HI16){
+	    riP->r_type = ARM_RELOC_HALF;
+	}
+	else
+#endif
 	riP->r_type = fixP->fx_r_type;
 	/*
 	 * For undefined symbols this will be an external relocation entry.
-	 * Or if this is an external coalesced symbol.
+	 * Or if this is an external coalesced symbol or weak symbol.
 	 */
 #if defined(I386) && defined(ARCH64)
 	if(fixP->fx_subsy == NULL &&
@@ -1163,8 +1191,15 @@ unsigned long debug_section)
 	if((symbolP->sy_type & N_TYPE) == N_UNDF ||
 	   ((symbolP->sy_type & N_EXT) == N_EXT &&
 	    (symbolP->sy_type & N_TYPE) == N_SECT &&
-	    is_section_coalesced(symbolP->sy_other) &&
-	    fixP->fx_subsy == NULL)){
+	    (is_section_coalesced(symbolP->sy_other) ||
+	     (symbolP->sy_desc & N_WEAK_DEF) == N_WEAK_DEF) &&
+	    fixP->fx_subsy == NULL)
+#if defined(I386) && !defined(ARCH64)
+	   ||
+	   ((symbolP->sy_type & N_TYPE) == N_SECT &&
+	    fixP->fx_r_type == GENERIC_RELOC_TLV)
+#endif
+        ){
 #endif
 	    riP->r_extern = 1;
 	    riP->r_symbolnum = symbolP->sy_number;
@@ -1243,12 +1278,15 @@ unsigned long debug_section)
 		else
 #endif
 #ifdef ARM
-		if(fixP->fx_r_type == ARM_RELOC_OI12)
-		    sectdiff = ARM_RELOC_OI12_SECTDIFF;
+		if(fixP->fx_r_type == ARM_RELOC_LO16 ||
+		   fixP->fx_r_type == ARM_RELOC_HI16 ||
+		   fixP->fx_r_type == ARM_THUMB_RELOC_LO16 ||
+		   fixP->fx_r_type == ARM_THUMB_RELOC_HI16)
+		    sectdiff = ARM_RELOC_HALF_SECTDIFF;
 		else
 #endif
 		{
-		    if(fixP->fx_r_type != 0){
+		    if(fixP->fx_r_type != 0 && fixP->fx_r_type != NO_RELOC){
 			layout_file = fixP->file;
 			layout_line = fixP->line;
 			as_fatal("Internal error: incorrect fx_r_type (%u) for "
@@ -1262,9 +1300,22 @@ unsigned long debug_section)
 		}
 		memset(&sri, '\0',sizeof(struct scattered_relocation_info));
 		sri.r_scattered = 1;
+#ifdef ARM
+		/* see arm_reloc.h for the encodings in the low 2 bits */
+		if(fixP->fx_r_type == ARM_RELOC_LO16 ||
+		   fixP->fx_r_type == ARM_RELOC_HI16 ||
+		   fixP->fx_r_type == ARM_THUMB_RELOC_LO16 ||
+		   fixP->fx_r_type == ARM_THUMB_RELOC_HI16)
+		    sri.r_length = fixP->fx_r_type & 0x3;
+		else
+#endif
 		sri.r_length    = riP->r_length;
 		sri.r_pcrel     = riP->r_pcrel;
 		sri.r_address   = riP->r_address;
+                if(sri.r_address != riP->r_address)
+		    as_fatal("Section too large, can't encode r_address (0x%x) "
+			     "into 24-bits of scattered relocation entry",
+			     riP->r_address);
 		sri.r_type      = sectdiff;
 		sri.r_value     = symbolP->sy_value;
 		*riP = *((struct relocation_info *)&sri);
@@ -1314,10 +1365,15 @@ unsigned long debug_section)
 		}
 #endif
 #ifdef ARM
-		else if(sectdiff == ARM_RELOC_OI12_SECTDIFF){
-		    sri.r_address = ((symbolP->sy_value -
-				     fixP->fx_subsy->sy_value
-				     + fixP->fx_offset) >> 12) & 0xfffff;
+		else if(sectdiff == ARM_RELOC_HALF_SECTDIFF){
+		    if((sri.r_length & 0x1) == 0x1)
+			sri.r_address = (symbolP->sy_value -
+					 fixP->fx_subsy->sy_value
+					 + fixP->fx_offset) & 0xffff;
+		    else
+			sri.r_address = ((symbolP->sy_value -
+					  fixP->fx_subsy->sy_value +
+					  fixP->fx_offset) >> 16) & 0xffff;
 		}
 #endif
 		*riP = *((struct relocation_info *)&sri);
@@ -1366,6 +1422,10 @@ unsigned long debug_section)
 		sri.r_length    = riP->r_length;
 		sri.r_pcrel     = riP->r_pcrel;
 		sri.r_address   = riP->r_address;
+                if(sri.r_address != riP->r_address)
+		    as_fatal("Section too large, can't encode r_address (0x%x) "
+			     "into 24-bits of scattered relocation entry",
+			     riP->r_address);
 		sri.r_type      = riP->r_type;
 		sri.r_value     = symbolP->sy_value;
 		*riP = *((struct relocation_info *)&sri);
@@ -1408,10 +1468,23 @@ unsigned long debug_section)
 	   fixP->fx_r_type == SPARC_RELOC_LO10)
 #endif
 #ifdef ARM
-	if(fixP->fx_r_type == ARM_RELOC_OI12)
+	if(fixP->fx_r_type == ARM_RELOC_LO16 ||
+	   fixP->fx_r_type == ARM_RELOC_HI16 ||
+	   fixP->fx_r_type == ARM_THUMB_RELOC_LO16 ||
+	   fixP->fx_r_type == ARM_THUMB_RELOC_HI16)
 #endif
 	{
 	    memset(riP, '\0', sizeof(struct relocation_info));
+#ifdef ARM
+	    /* see arm_reloc.h for the encodings in the low 2 bits */
+	    if(fixP->fx_r_type == ARM_RELOC_LO16 ||
+	       fixP->fx_r_type == ARM_RELOC_HI16 ||
+	       fixP->fx_r_type == ARM_THUMB_RELOC_LO16 ||
+	       fixP->fx_r_type == ARM_THUMB_RELOC_HI16){
+		riP->r_length = fixP->fx_r_type & 0x3;
+	    }
+	    else
+#endif
 	    switch(fixP->fx_size){
 		case 1:
 		    riP->r_length = 0;
@@ -1508,9 +1581,13 @@ unsigned long debug_section)
 		riP->r_address = (fixP->fx_value >> 10) & 0x3fffff;
 #endif
 #ifdef ARM
-	    riP->r_type	 = ARM_RELOC_PAIR;
-	    if (fixP->fx_r_type == ARM_RELOC_OI12)
-		riP->r_address = (fixP->fx_value >> 12) & 0xfffff;
+	    riP->r_type = ARM_RELOC_PAIR;
+	    if(fixP->fx_r_type == ARM_RELOC_HI16 ||
+	       fixP->fx_r_type == ARM_THUMB_RELOC_HI16)
+		riP->r_address = 0xffff & fixP->fx_value;
+	    else if(fixP->fx_r_type == ARM_RELOC_LO16 ||
+		    fixP->fx_r_type == ARM_THUMB_RELOC_LO16)
+		riP->r_address = 0xffff & (fixP->fx_value >> 16);
 #endif
 	    count = 2;
 	}
@@ -1528,7 +1605,7 @@ void
 set_default_section_align(
 char *segname,
 char *sectname,
-unsigned long align)
+uint32_t align)
 {
     frchainS *frcP;
 
@@ -1560,7 +1637,8 @@ clear_section_flags(void)
     frchainS *frcP;
 
 	for(frcP = frchain_root; frcP != NULL; frcP = frcP->frch_next)
-	    if(frcP->frch_section.flags != S_ZEROFILL)
+	    if(frcP->frch_section.flags != S_ZEROFILL &&
+	       frcP->frch_section.flags != S_THREAD_LOCAL_ZEROFILL)
 		frcP->frch_section.flags = 0;
 }
 
