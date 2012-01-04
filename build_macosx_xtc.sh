@@ -46,6 +46,7 @@
 # Valid values for USE_CCTOOLS are iphonedev, xchain or apple.
 # xchain is based on (and then fixed) iphonedev so seems to be the only choice.
 USE_CCTOOLS="xchain"
+XCHAIN_VER=-ma
 
 # MacOSX10.4.universal.sdk may allow PPC targetting toolchains.
 DARWIN_VER=$1
@@ -274,10 +275,16 @@ build_cctools_iphonedev()
 # Works, but must be built in-place.
 build_cctools_xchain()
 {
- [ -d xchain-build ] && rm -rf xchain-build
- [ -d xchain ]       || git clone https://github.com/tatsh/xchain.git
- cp -rf xchain xchain-build-${DARWIN_VER}
- CCTOOLS_DIR=xchain-build-${DARWIN_VER}/odcctools-9.2-ld
+ [ -d xchain${XCHAIN_VER}-build ] && rm -rf xchain${XCHAIN_VER}-build
+ if [ ! -d xchain${XCHAIN_VER} ] ; then
+  if [ "$XCHAIN_VER" = "-ma" ] ; then
+   git clone https://github.com/mingwandroid/xchain.git xchain${XCHAIN_VER}
+  else
+   git clone https://github.com/tatsh/xchain.git xchain${XCHAIN_VER}
+  fi
+ fi
+ cp -rf xchain xchain${XCHAIN_VER}-build-${DARWIN_VER}
+ CCTOOLS_DIR=xchain${XCHAIN_VER}-build-${DARWIN_VER}/odcctools-9.2-ld
  pushd "${CCTOOLS_DIR}"
   LDFLAGS="-m32" CFLAGS="-m32 -fpermissive" ./configure --prefix=$PREFIX/usr --target=$TARGET --with-sysroot=$PREFIX --enable-ld64
   make
