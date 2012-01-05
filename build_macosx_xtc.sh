@@ -213,7 +213,7 @@ umount_img()
 apply_windows_cpio_patch()
 {
 if [ "$UNAME" = "Windows" ] ; then
- patch -p1 <../xchain-ma/patches/cpio-2.11-Windows.patch
+ patch -p1 <../xchain${XCHAIN_VER}/patches/cpio-2.11-Windows.patch
 fi
 }
 
@@ -332,9 +332,10 @@ build_cctools_apple()
  find cctools-809-build-${DARWIN_VER} | xargs touch
  pushd cctools-809-build-${DARWIN_VER}
  if [ ! "$UNAME" = "Darwin" ] ; then
-  patch -p0 < ../xchain-${DARWIN_VER}/patches/cctools-806-nondarwin.patch
+  patch -p1 < ../xchain${XCHAIN_VER}/patches/cctools-809-nondarwin.patch
  fi
- patch -p0 < ../xchain-${DARWIN_VER}/patches/cctools-806-nondarwin.patch
+ patch -p1 < ../xchain${XCHAIN_VER}/patches/cctools-809-save-temps.patch
+ exit 1
  make $MAKE_ARGS_CCTOOLS_APPLE
  make install
  popd
@@ -430,10 +431,10 @@ build_gcc()
  if [ ! -d gcc-5666.3 ] ; then
   tar xvf gcc-5666.3.tar.gz
   pushd gcc-5666.3
-   patch -p1 < ../xchain-${DARWIN_VER}/patches/gcc-5666.3-cflags.patch
-   patch -p1 < ../xchain-${DARWIN_VER}/patches/gcc-5666.3-t-darwin_prefix.patch
-   patch -p1 < ../xchain-${DARWIN_VER}/patches/gcc-5666.3-strip_for_target.patch
-   patch -p1 < ../xchain-${DARWIN_VER}/patches/gcc-5666.3-relocatable.patch
+   patch -p1 < ../xchain${XCHAIN_VER}/patches/gcc-5666.3-cflags.patch
+   patch -p1 < ../xchain${XCHAIN_VER}/patches/gcc-5666.3-t-darwin_prefix.patch
+   patch -p1 < ../xchain${XCHAIN_VER}/patches/gcc-5666.3-strip_for_target.patch
+   patch -p1 < ../xchain${XCHAIN_VER}/patches/gcc-5666.3-relocatable.patch
   popd
  fi
  mkdir gcc-build-${DARWIN_VER}
@@ -483,9 +484,9 @@ build_llvm_gcc()
  # rm -rf llvmgcc42-2336.1
  tar zxvf llvmgcc42-2336.1.tar.gz
  pushd llvmgcc42-2336.1
-  patch -p0 < ../xchain-${DARWIN_VER}/patches/llvmgcc42-2336.1-redundant.patch
-  patch -p0 < ../xchain-${DARWIN_VER}/patches/llvmgcc42-2336.1-mempcpy.patch
-  patch -p0 < ../xchain-${DARWIN_VER}/patches/llvmgcc42-2336.1-relocatable.patch
+  patch -p0 < ../xchain${XCHAIN_VER}/patches/llvmgcc42-2336.1-redundant.patch
+  patch -p0 < ../xchain${XCHAIN_VER}/patches/llvmgcc42-2336.1-mempcpy.patch
+  patch -p0 < ../xchain${XCHAIN_VER}/patches/llvmgcc42-2336.1-relocatable.patch
  popd
 
  mkdir llvm-obj-build-${DARWIN_VER}
@@ -543,7 +544,7 @@ if [ "$2" = "install" -o "$2" = "install-all" ] ; then
  if [ "$2" = "install-all" ] ; then
   prepare_osx_sdk $FINAL_INSTALL/$PREFIX
  fi
- pushd xchain-${DARWIN_VER}/odcctools-9.2-ld
+ pushd xchain-ma-build-${DARWIN_VER}/odcctools-9.2-ld
   make DESTDIR=$FINAL_INSTALL install
  popd
  pushd gcc-build-${DARWIN_VER}
