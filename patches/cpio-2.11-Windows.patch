@@ -1,0 +1,37 @@
+--- cpio-2.11/src/filetypes.h-orig.h	2012-01-05 08:40:04 +0000
++++ cpio-2.11/src/filetypes.h	2012-01-05 08:39:44 +0000
+@@ -81,5 +81,7 @@
+ #ifndef S_ISLNK
+ #define lstat stat
+ #endif
++#ifndef stat
+ int lstat ();
+ int stat ();
++#endif
+--- cpio-2.11/lib/rtapelib.c-orig.c	2012-01-05 08:45:16 +0000
++++ cpio-2.11/lib/rtapelib.c	2012-01-05 08:45:38 +0000
+@@ -425,7 +425,7 @@
+   }
+ 
+   /* FIXME: Should somewhat validate the decoding, here.  */
+-  if (gethostbyname (remote_host) == NULL)
++/*  if (gethostbyname (remote_host) == NULL) */
+     error (EXIT_ON_EXEC_ERROR, 0, _("Cannot connect to %s: resolve failed"),
+ 	   remote_host);
+ 	  
+--- cpio-2.11/src/copyout.c-orig	2012-01-05 08:54:51 +0000
++++ cpio-2.11/src/copyout.c	2012-01-05 08:55:20 +0000
+@@ -805,9 +805,12 @@
+ 	      {
+ 		char *link_name = (char *) xmalloc (file_stat.st_size + 1);
+ 		int link_size;
+-
++#ifndef HAVE_READLINK
+ 		link_size = readlink (orig_file_name, link_name,
+ 			              file_stat.st_size);
++#else
++		link_size = -1;
++#endif
+ 		if (link_size < 0)
+ 		  {
+ 		    readlink_warn (orig_file_name);
