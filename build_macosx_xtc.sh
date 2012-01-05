@@ -331,9 +331,14 @@ build_cctools_apple()
  [ -d cctools-809-build-${DARWIN_VER} ]  || cp -rf cctools-809 cctools-809-build-${DARWIN_VER}
  find cctools-809-build-${DARWIN_VER} | xargs touch
  pushd cctools-809-build-${DARWIN_VER}
- make $MAKE_ARGS
+ if [ ! "$UNAME" = "Darwin" ] ; then
+  patch -p0 < ../xchain-${DARWIN_VER}/patches/cctools-806-nondarwin.patch
+ fi
+ patch -p0 < ../xchain-${DARWIN_VER}/patches/cctools-806-nondarwin.patch
+ make $MAKE_ARGS_CCTOOLS_APPLE
  make install
  popd
+ exit 1
 }
 
 write_cctools_iphonedev_patches()
@@ -421,17 +426,14 @@ build_gcc()
  fi
  popd
 
- cp gcc-5666.3-t-darwin_prefix.patch xchain/patches/
- cp gcc-5666.3-strip_for_target.patch xchain/patches/
- cp gcc-5666.3-relocatable.patch xchain/patches/
  downloadIfNotExists gcc-5666.3.tar.gz ] http://opensource.apple.com/tarballs/gcc/gcc-5666.3.tar.gz
  if [ ! -d gcc-5666.3 ] ; then
   tar xvf gcc-5666.3.tar.gz
   pushd gcc-5666.3
-   patch -p1 < ../xchain/patches/gcc-5666.3-cflags.patch
-   patch -p1 < ../xchain/patches/gcc-5666.3-t-darwin_prefix.patch
-   patch -p1 < ../xchain/patches/gcc-5666.3-strip_for_target.patch
-   patch -p1 < ../xchain/patches/gcc-5666.3-relocatable.patch
+   patch -p1 < ../xchain-${DARWIN_VER}/patches/gcc-5666.3-cflags.patch
+   patch -p1 < ../xchain-${DARWIN_VER}/patches/gcc-5666.3-t-darwin_prefix.patch
+   patch -p1 < ../xchain-${DARWIN_VER}/patches/gcc-5666.3-strip_for_target.patch
+   patch -p1 < ../xchain-${DARWIN_VER}/patches/gcc-5666.3-relocatable.patch
   popd
  fi
  mkdir gcc-build-${DARWIN_VER}
@@ -480,14 +482,10 @@ build_llvm_gcc()
  # Clean up because this is a two stage process and we patch between the stages.
  # rm -rf llvmgcc42-2336.1
  tar zxvf llvmgcc42-2336.1.tar.gz
- # I moved the patching to here instead of after building llvm-obj.
- cp llvmgcc42-2336.1-redundant.patch xchain/patches/
- cp llvmgcc42-2336.1-mempcpy.patch xchain/patches/
- cp llvmgcc42-2336.1-relocatable.patch xchain/patches/
  pushd llvmgcc42-2336.1
-  patch -p0 < ../xchain/patches/llvmgcc42-2336.1-redundant.patch
-  patch -p0 < ../xchain/patches/llvmgcc42-2336.1-mempcpy.patch
-  patch -p0 < ../xchain/patches/llvmgcc42-2336.1-relocatable.patch
+  patch -p0 < ../xchain-${DARWIN_VER}/patches/llvmgcc42-2336.1-redundant.patch
+  patch -p0 < ../xchain-${DARWIN_VER}/patches/llvmgcc42-2336.1-mempcpy.patch
+  patch -p0 < ../xchain-${DARWIN_VER}/patches/llvmgcc42-2336.1-relocatable.patch
  popd
 
  mkdir llvm-obj-${DARWIN_VER}
@@ -614,15 +612,18 @@ if [ "$2" = "apple" -o "$2" = "xchain" -o "$2" = "iphonedev" ] ; then
  USE_CCTOOLS=$2
 fi
 
+# MAKE_ARGS_CCTOOLS_APPLE is because passing CFLAGS="anything" overrides
+# the Makefile settings for them.
 MAKE_ARGS=""
 if [ "$3" = "keep-going" ] ; then
  KEEP_GOING=1
  MAKE_ARGS="${MAKE_ARGS} -k "
+ MAKE_ARGS_CCTOOLS_APPLE="${MAKE_ARGS} -k "
 fi
 
 if [ "$4" = "save-temps" ] ; then
- SAVE_TEMPS=1
- MAKE_ARGS="${MAKE_ARGS} CFLAGS=-save-temps "
+  SAVE_TEMPS=1
+  MAKE_ARGS="${MAKE_ARGS} CFLAGS=-save-temps "
 fi
 
 if [ $USE_CCTOOLS = "iphonedev" ] ; then

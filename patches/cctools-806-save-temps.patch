@@ -1,0 +1,11 @@
+--- cctools-809/Makefile-orig	2012-01-05 20:46:51.000000000 +0000
++++ cctools-809/Makefile	2012-01-05 20:47:23.000000000 +0000
+@@ -22,7 +22,7 @@
+ 
+ DSTROOT = /
+ RC_OS = macos
+-RC_CFLAGS =
++RC_CFLAGS = -save-temps
+ 
+ INSTALLSRC_SUBDIRS = $(COMMON_SUBDIRS) $(SUBDIRS_32) ar include efitools \
+ 		     libmacho
