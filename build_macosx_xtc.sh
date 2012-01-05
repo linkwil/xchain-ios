@@ -335,11 +335,9 @@ build_cctools_apple()
   patch -p1 < ../xchain${XCHAIN_VER}/patches/cctools-809-nondarwin.patch
  fi
  patch -p1 < ../xchain${XCHAIN_VER}/patches/cctools-809-save-temps.patch
- exit 1
  make $MAKE_ARGS_CCTOOLS_APPLE
  make install
  popd
- exit 1
 }
 
 write_cctools_iphonedev_patches()
