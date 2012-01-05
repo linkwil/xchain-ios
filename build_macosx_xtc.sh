@@ -1,4 +1,4 @@
-!/bin/bash
+#!/bin/bash
 
 # Current problems:
 # None of the MacOSX10.*.pkg files in xcode_3.2.6_and_ios_sdk_4.3.dmg contain anything other than usr/lib/i686-apple-darwin10 (i.e. there's no 8 or 9 in any of them), so
@@ -38,7 +38,7 @@
 
 # Valid values for USE_CCTOOLS are iphonedev, xchain or apple.
 # xchain is based on (and then fixed) iphonedev so seems to be the only choice.
-USE_CCTOOLS="xchain"
+USE_CCTOOLS="apple"
 MAKE_ARGS=""
 KEEP_GOING=0
 SAVE_TEMPS=0
@@ -488,8 +488,8 @@ build_llvm_gcc()
   patch -p0 < ../xchain-${DARWIN_VER}/patches/llvmgcc42-2336.1-relocatable.patch
  popd
 
- mkdir llvm-obj-${DARWIN_VER}
- pushd llvm-obj-${DARWIN_VER}
+ mkdir llvm-obj-build-${DARWIN_VER}
+ pushd llvm-obj-build-${DARWIN_VER}
   CFLAGS="-m32" CXXFLAGS="$CFLAGS" LDFLAGS="-m32" \
       ../llvmgcc42-2336.1/llvmCore/configure \
       --prefix=$PREFIX/usr \
@@ -511,7 +511,7 @@ build_llvm_gcc()
       --enable-languages=objc,c++,obj-c++ \
       --disable-bootstrap \
       --enable--checking \
-      --enable-llvm=$PWD/../llvm-obj \
+      --enable-llvm=$PWD/../llvm-obj-build-${DARWIN_VER} \
       --enable-shared \
       --enable-static \
       --enable-libgomp \
@@ -549,7 +549,7 @@ if [ "$2" = "install" -o "$2" = "install-all" ] ; then
  pushd gcc-build-${DARWIN_VER}
   make DESTDIR=$FINAL_INSTALL install
  popd
- pushd llvm-obj-${DARWIN_VER}
+ pushd llvm-obj-build-${DARWIN_VER}
   make DESTDIR=$FINAL_INSTALL install
  popd
  pushd llvmgcc-build-${DARWIN_VER}
@@ -608,6 +608,14 @@ fi
 
 prepare_osx_sdk $PREFIX
 
+MAKE_CCTOOLS=1
+MAKE_COMPILER=all
+if [ "$2" = "gcc" -o "$2" = "llvmgcc" ] ; then
+ USE_CCTOOLS="apple"
+ MAKE_CCTOOLS=0
+ MAKE_COMPILER=$2
+fi
+
 if [ "$2" = "apple" -o "$2" = "xchain" -o "$2" = "iphonedev" ] ; then
  USE_CCTOOLS=$2
 fi
@@ -626,20 +634,27 @@ if [ "$4" = "save-temps" ] ; then
   MAKE_ARGS="${MAKE_ARGS} CFLAGS=-save-temps "
 fi
 
-if [ $USE_CCTOOLS = "iphonedev" ] ; then
- build_cctools_iphonedev
-elif [ $USE_CCTOOLS = "xchain" ] ; then
-  build_cctools_xchain
-elif [ $USE_CCTOOLS = "apple" ] ; then
-  build_cctools_apple
+if [ "$MAKE_CCTOOLS" = "1" ] ; then
+ if [ $USE_CCTOOLS = "iphonedev" ] ; then
+  build_cctools_iphonedev
+ elif [ $USE_CCTOOLS = "xchain" ] ; then
+   build_cctools_xchain
+ elif [ $USE_CCTOOLS = "apple" ] ; then
+   build_cctools_apple
+ fi
 fi
 
 # --with-lipo doesn't do anything for build_gcc, so must add the prefix bin folder to the path
 # (and also ensure lipo exists - this is done in build_cctools_xchain)
 PATH=$PREFIX/usr/bin:$PATH
 
-# build_gcc
-# build_llvm_gcc
+if [ "$MAKE_COMPILER" = "all" -o "$MAKE_COMPILER" = "gcc" ] ; then
+ build_gcc
+fi
+
+if [ "$MAKE_COMPILER" = "all" -o "$MAKE_COMPILER" = "llvmgcc" ] ; then
+ build_llvm_gcc
+fi
 
 # Test:
 # export LAST=$PWD
