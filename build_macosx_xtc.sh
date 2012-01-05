@@ -1,4 +1,4 @@
-#!/bin/bash
+!/bin/bash
 
 # Current problems:
 # None of the MacOSX10.*.pkg files in xcode_3.2.6_and_ios_sdk_4.3.dmg contain anything other than usr/lib/i686-apple-darwin10 (i.e. there's no 8 or 9 in any of them), so
@@ -65,10 +65,26 @@ if [ -z $OSX_SDK_PKG ] ; then
  OSX_SDK_PKG=${OSX_SDK_VER}.pkg
 fi
 
-# Doesn't report missing gobjc stuff as detection of that is more complicated.
-NEEDED_TOOLS="dmg2img xar zcat cpio svn patch bison flex"
+UNAME=$(uname -s)
+case "$UNAME" in
+ "MINGW"*)
+  UNAME=Windows
+ ;;
+esac
 
-UNAME=`uname -s`
+SUDO=sudo
+# Doesn't report missing gobjc stuff as detection of that is more complicated.
+if [ "$UNAME" = "Windows" ] ; then
+ # xar, zcat and cpio are all needed for unpacking pkg files.
+ # xar doesn't compile (uid_t issue)...
+ # zcat seems to be provided.
+ # cpio can be compiled with some patching (done)...
+ # so until xar on Windows is fixed, we have to use already-unpacked SDKs.
+ NEEDED_TOOLS="svn patch bison flex"
+ SUDO=
+else
+ NEEDED_TOOLS="dmg2img xar zcat cpio svn patch bison flex"
+fi
 
 error_msg()
 {
@@ -93,9 +109,9 @@ downloadIfNotExists()
     fi
 }
 
-if [ ! "$UNAME" = "Darwin" ] ; then
+if [ "$UNAME" = "Linux" ] ; then
  NEEDED_TOOLS="$NEEDED_TOOLS xml2"
-else
+elif [ "$UNAME" = "Darwin" ] ; then
  echo "" > a.c
  gcc a.c -c -o a.o
  LIBTOOL_STATIC=$(libtool -static -o a.a a.o)
@@ -194,22 +210,31 @@ umount_img()
  done
 }
 
+apply_windows_cpio_patch()
+{
+if [ "$UNAME" = "Windows" ] ; then
+ patch -p1 <../xchain-ma/patches/cpio-2.11-Windows.patch
+fi
+}
+
 ROOT=$PWD
 PREFIX=/$TARGET
 # Not sure if DARWIN_PREFIX is required.
 export DARWIN_PREFIX=$PREFIX
-[ -d $PREFIX ]   || sudo mkdir $PREFIX
+[ -d $PREFIX ]   || $SUDO mkdir $PREFIX
 USER=`whoami`
 if [ "$UNAME" = "Darwin" ] ; then
  GROUP=admin
 else
  GROUP=`whoami`
 fi
-sudo chown $USER:$GROUP $PREFIX
+if [ ! "$UNAME" = "Windows" ] ; then
+ $SUDO chown $USER:$GROUP $PREFIX
+fi
 [ -d $ROOT/bin ] && PATH=$ROOT/bin:$PATH
 MISSING_TOOLS=$(missing_tools $NEEDED_TOOLS)
 
-if [ "$MISSING_TOOLS" = "xar" ] ; then
+if [[ "$MISSING_TOOLS" = *xar* ]] ; then
  echo "xar missing, Ubuntu Natty (and other creatures) doesn't provide a package, so compiling from source"
  downloadIfNotExists xar-1.5.2.tar.gz http://xar.googlecode.com/files/xar-1.5.2.tar.gz
  tar -xzvf xar-1.5.2.tar.gz
@@ -220,7 +245,8 @@ if [ "$MISSING_TOOLS" = "xar" ] ; then
  popd
  [ -d $ROOT/bin ] && PATH=$ROOT/bin:$PATH
  MISSING_TOOLS=$(missing_tools $NEEDED_TOOLS)
-elif [ "$MISSING_TOOLS" = "dmg2img" ] ; then
+fi
+if [[ "$MISSING_TOOLS" = *dmg2img* ]] ; then
  echo "dmg2img missing, Darwin doesn't provide a package, so compiling from source"
  downloadIfNotExists dmg2img-1.6.2.tar.gz http://vu1tur.eu.org/tools/dmg2img-1.6.2.tar.gz
  tar -xzvf dmg2img-1.6.2.tar.gz
@@ -233,7 +259,17 @@ elif [ "$MISSING_TOOLS" = "dmg2img" ] ; then
  [ -d $ROOT/bin ] && PATH=$ROOT/bin:$PATH
  MISSING_TOOLS=$(missing_tools $NEEDED_TOOLS)
 fi
-
+if [[ $MISSING_TOOLS = *cpio* ]] ; then
+ echo "cpio missing, MinGW doesn't provide a package, so compiling from source"
+ downloadIfNotExists cpio-2.11.tar.gz http://ftp.gnu.org/gnu/cpio/cpio-2.11.tar.gz
+ tar -xzvf cpio-2.11.tar.gz
+ pushd cpio-2.11
+  apply_windows_cpio_patch
+  ./configure --prefix=$PWD/..
+  make
+  make install
+  MISSING_TOOLS=$(missing_tools $NEEDED_TOOLS)
+fi
 if [ ! "$MISSING_TOOLS" = "" ] ; then
  echo -e "The following tools are missing:\n $MISSING_TOOLS"
  exit 1
@@ -243,20 +279,33 @@ prepare_osx_sdk()
 {
  local _PWD=$PWD
  local _TARGET=$1
- if [ ! -d $_PWD/SDKs/$OSX_SDK ] ; then
-  # Download Apple SDK (from xcode 3.2.6) and source code tarballs for cctools and llvmgcc.
-  downloadIfNotExists xcode_3.2.6_and_ios_sdk_4.3.dmg ] http://adcdownload.apple.com/Developer_Tools/xcode_3.2.6_and_ios_sdk_4.3__final/xcode_3.2.6_and_ios_sdk_4.3.dmg
- # Covert the xcode dmg to an img.
-  [ -f xcode.img ]                       || dmg2img -v -i xcode_3.2.6_and_ios_sdk_4.3.dmg -o xcode.img
-  XCODE_MOUNT_PATH="unset"
-  mount_img xcode.img xcode-3.2.6 XCODE_MOUNT_PATH
-  # Extract the Leopard SDK (Tiger might allow for PPC builds - not that that matters these days)
-  unpack_pkg "$XCODE_MOUNT_PATH"/Packages/${OSX_SDK_PKG}
-  umount_img xcode.img $XCODE_MOUNT_PATH
+ if [ "$UNAME" = "Windows" ] ; then
+  # Cant mount an .img in Windows (so we dont need xar either), instead use copied pkg files.
+  if [ ! -d $_PWD/SDKs/$OSX_SDK ] ; then
+   if [ ! -f $_PWD/Packages/${OSX_SDK_PKG} ] ; then
+     error_msg "Windows build needs OS X SDK pkg files ${OSX_SDK_PKG}"
+   fi
+   unpack_pkg $_PWD/Packages/${OSX_SDK_PKG}
+  fi
+ else
+  if [ ! -d $_PWD/SDKs/$OSX_SDK ] ; then
+   # Download Apple SDK (from xcode 3.2.6) and source code tarballs for cctools and llvmgcc.
+   downloadIfNotExists xcode_3.2.6_and_ios_sdk_4.3.dmg ] http://adcdownload.apple.com/Developer_Tools/xcode_3.2.6_and_ios_sdk_4.3__final/xcode_3.2.6_and_ios_sdk_4.3.dmg
+   # Covert the xcode dmg to an img.
+   [ -f xcode.img ]                       || dmg2img -v -i xcode_3.2.6_and_ios_sdk_4.3.dmg -o xcode.img
+   XCODE_MOUNT_PATH="unset"
+   mount_img xcode.img xcode-3.2.6 XCODE_MOUNT_PATH
+   # Extract the Leopard SDK (Tiger might allow for PPC builds - not that that matters these days)
+#   unpack_pkg "$XCODE_MOUNT_PATH"/Packages/${OSX_SDK_PKG}
+   unpack_pkg "$XCODE_MOUNT_PATH"/Packages/MacOSX10.4.Universal.pkg
+   unpack_pkg "$XCODE_MOUNT_PATH"/Packages/MacOSX10.5.pkg
+   unpack_pkg "$XCODE_MOUNT_PATH"/Packages/MacOSX10.6.pkg
+   umount_img xcode.img $XCODE_MOUNT_PATH
+  fi
  fi
  if [ ! -d $_TARGET/Developer ] ; then
-  sudo mkdir $_TARGET
-  sudo chown $USER:$GROUP $_TARGET
+  $SUDO mkdir $_TARGET
+  [ ! "$UNAME" = "Windows" ] && $SUDO chown $USER:$GROUP $_TARGET
   pushd $_TARGET
    mkdir Developer
    cp -R $_PWD/SDKs Developer
@@ -352,11 +401,13 @@ build_cctools_xchain()
   make $MAKE_ARGS
   make install
   # Make symlinks 'otool' and 'lipo' (as there's no Linux equivalents to cause clashes).
-  pushd $PREFIX/usr/bin
-   ln -sf ${TARGET}-otool otool
-   ln -sf ${TARGET}-otool64 otool64
-   ln -sf ${TARGET}-lipo lipo
-  popd
+  if [ -d $PREFIX/usr/bin ] ; then
+   pushd $PREFIX/usr/bin
+    ln -sf ${TARGET}-otool otool
+    ln -sf ${TARGET}-otool64 otool64
+    ln -sf ${TARGET}-lipo lipo
+   popd
+  fi
  popd
 }
 

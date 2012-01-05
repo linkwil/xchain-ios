@@ -26,7 +26,7 @@
  		char *link_name = (char *) xmalloc (file_stat.st_size + 1);
  		int link_size;
 -
-+#ifndef HAVE_READLINK
++#ifdef HAVE_READLINK
  		link_size = readlink (orig_file_name, link_name,
  			              file_stat.st_size);
 +#else
