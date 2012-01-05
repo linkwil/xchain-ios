@@ -334,8 +334,12 @@ build_cctools_apple()
  if [ ! "$UNAME" = "Darwin" ] ; then
   patch -p1 < ../xchain${XCHAIN_VER}/patches/cctools-809-nondarwin.patch
  fi
- exit 1
- make $MAKE_ARGS_CCTOOLS_APPLE
+ patch -p1 < ../xchain${XCHAIN_VER}/patches/cctools-809-save-temps.patch
+ if [ "$UNAME" = "Darwin" ] ; then
+  make $MAKE_ARGS_CCTOOLS_APPLE
+ else
+  make $MAKE_ARGS_CCTOOLS_APPLE RC_XBS=YES
+ fi
  make install
  popd
 }
