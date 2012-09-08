@@ -2,16 +2,16 @@
 /* include/config.h.in.  Generated from configure.ac by autoheader.  */
 
 /* filesystem root of cross build environment */
-/* #undef CROSS_SYSROOT */
+#define CROSS_SYSROOT "/usr/arm-apple-darwin"
 
 /* Default Mach architecture name */
-#define DEFAULT_MACH_ARCH "i386"
+#define DEFAULT_MACH_ARCH "arm"
 
 /* Emulated CPU subtype */
-#define EMULATED_HOST_CPU_SUBTYPE 3
+#define EMULATED_HOST_CPU_SUBTYPE 6
 
 /* Emulated CPU type */
-#define EMULATED_HOST_CPU_TYPE 7
+#define EMULATED_HOST_CPU_TYPE 12
 
 /* Define to 1 if you have the declaration of `getc_unlocked', and to 0 if you
    don't. */

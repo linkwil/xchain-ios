@@ -62,6 +62,32 @@ enum byte_sex {
     LITTLE_ENDIAN_BYTE_SEX
 };
 
+/** H2CO3 hack
+ */
+struct version_min_command {
+	uint32_t cmd;
+	uint32_t cmdsize;
+	uint32_t version;
+	uint32_t reserved;
+};
+
+struct dyld_info_command {
+	uint32_t cmd;
+	uint32_t cmdsize;
+	uint32_t rebase_off;
+	uint32_t rebase_size;
+	uint32_t bind_off;
+	uint32_t bind_size;
+	uint32_t weak_bind_off;
+	uint32_t weak_bind_size;
+	uint32_t lazy_bind_off;
+	uint32_t lazy_bind_size;
+	uint32_t export_off;
+	uint32_t export_size;
+};
+/** end of H2CO3 hack
+ */
+    
 #define SWAP_SHORT(a) ( ((a & 0xff) << 8) | ((unsigned short)(a) >> 8) )
 
 #define SWAP_INT(a)  ( ((a) << 24) | \
@@ -335,9 +361,11 @@ __private_extern__ void swap_linkedit_data_command(
     struct linkedit_data_command *ld,
     enum byte_sex target_byte_sex);
 
+/** H2CO3 hack
 __private_extern__ void swap_version_min_command(
     struct version_min_command *ver_cmd,
     enum byte_sex target_byte_sex);
+*/
 
 __private_extern__ void swap_rpath_command(
     struct rpath_command *rpath_cmd,
@@ -347,9 +375,11 @@ __private_extern__ void swap_encryption_command(
     struct encryption_info_command *ec,
     enum byte_sex target_byte_sex);
 
+/** H2CO3 hack
 __private_extern__ void swap_dyld_info_command(
     struct dyld_info_command *dc, 
     enum byte_sex target_byte_sex);
+*/
 
 __private_extern__ void swap_nlist(
     struct nlist *symbols,

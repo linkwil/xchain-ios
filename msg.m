@@ -24,5 +24,9 @@ int main() {
   PZMailMessage *msg = [[PZMailMessage alloc] initWithString:@"My message" recipient:@"John smith"];
   [msg deliver];
   [msg release];
+  NSArray *a = [NSArray arrayWithObjects:@"a", @"b", @"c", nil];
+  [a enumerateObjectsUsingBlock:^(id obj, NSUInteger index, BOOL *stop) {
+    NSLog(@"Object %lu = %@", index, obj);
+  }];
   return 0;
 }

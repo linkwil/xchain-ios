@@ -1,0 +1,51 @@
+files.o: ../../llvmgcc42-2335.15/libcpp/files.c config.h \
+ ../../llvmgcc42-2335.15/libcpp/system.h \
+ ../../llvmgcc42-2335.15/libcpp/../include/filenames.h \
+ ../../llvmgcc42-2335.15/libcpp/../include/libiberty.h \
+ ../../llvmgcc42-2335.15/libcpp/../include/ansidecl.h \
+ ../../llvmgcc42-2335.15/libcpp/../include/safe-ctype.h \
+ ../../llvmgcc42-2335.15/libcpp/include/cpplib.h \
+ ../../llvmgcc42-2335.15/libcpp/include/symtab.h \
+ ../../llvmgcc42-2335.15/libcpp/../include/obstack.h \
+ ../../llvmgcc42-2335.15/libcpp/include/line-map.h \
+ ../../llvmgcc42-2335.15/libcpp/internal.h \
+ ../../llvmgcc42-2335.15/libcpp/include/symtab.h \
+ ../../llvmgcc42-2335.15/libcpp/include/cpp-id-data.h \
+ ../../llvmgcc42-2335.15/libcpp/include/cpplib.h \
+ ../../llvmgcc42-2335.15/libcpp/include/mkdeps.h \
+ ../../llvmgcc42-2335.15/libcpp/../include/hashtab.h \
+ ../../llvmgcc42-2335.15/libcpp/../include/md5.h
+
+config.h:
+
+../../llvmgcc42-2335.15/libcpp/system.h:
+
+../../llvmgcc42-2335.15/libcpp/../include/filenames.h:
+
+../../llvmgcc42-2335.15/libcpp/../include/libiberty.h:
+
+../../llvmgcc42-2335.15/libcpp/../include/ansidecl.h:
+
+../../llvmgcc42-2335.15/libcpp/../include/safe-ctype.h:
+
+../../llvmgcc42-2335.15/libcpp/include/cpplib.h:
+
+../../llvmgcc42-2335.15/libcpp/include/symtab.h:
+
+../../llvmgcc42-2335.15/libcpp/../include/obstack.h:
+
+../../llvmgcc42-2335.15/libcpp/include/line-map.h:
+
+../../llvmgcc42-2335.15/libcpp/internal.h:
+
+../../llvmgcc42-2335.15/libcpp/include/symtab.h:
+
+../../llvmgcc42-2335.15/libcpp/include/cpp-id-data.h:
+
+../../llvmgcc42-2335.15/libcpp/include/cpplib.h:
+
+../../llvmgcc42-2335.15/libcpp/include/mkdeps.h:
+
+../../llvmgcc42-2335.15/libcpp/../include/hashtab.h:
+
+../../llvmgcc42-2335.15/libcpp/../include/md5.h:

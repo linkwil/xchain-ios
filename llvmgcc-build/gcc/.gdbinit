@@ -1,0 +1,10 @@
+dir .
+dir ../../llvmgcc42-2335.15/gcc
+dir ../../llvmgcc42-2335.15/gcc/ada
+dir ../../llvmgcc42-2335.15/gcc/cp
+dir ../../llvmgcc42-2335.15/gcc/fortran
+dir ../../llvmgcc42-2335.15/gcc/java
+dir ../../llvmgcc42-2335.15/gcc/objc
+dir ../../llvmgcc42-2335.15/gcc/objcp
+dir ../../llvmgcc42-2335.15/gcc/treelang
+source ../../llvmgcc42-2335.15/gcc/gdbinit.in

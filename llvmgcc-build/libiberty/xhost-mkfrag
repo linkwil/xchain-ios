@@ -1,0 +1,4 @@
+# Warning: this fragment is automatically generated
+# Following fragment copied from ../../llvmgcc42-2335.15/libiberty/../config/mh-x86pic
+PICFLAG=-fpic
+enable_shared = yes

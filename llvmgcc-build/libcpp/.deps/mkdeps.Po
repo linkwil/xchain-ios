@@ -1,0 +1,21 @@
+mkdeps.o: ../../llvmgcc42-2335.15/libcpp/mkdeps.c config.h \
+ ../../llvmgcc42-2335.15/libcpp/system.h \
+ ../../llvmgcc42-2335.15/libcpp/../include/filenames.h \
+ ../../llvmgcc42-2335.15/libcpp/../include/libiberty.h \
+ ../../llvmgcc42-2335.15/libcpp/../include/ansidecl.h \
+ ../../llvmgcc42-2335.15/libcpp/../include/safe-ctype.h \
+ ../../llvmgcc42-2335.15/libcpp/include/mkdeps.h
+
+config.h:
+
+../../llvmgcc42-2335.15/libcpp/system.h:
+
+../../llvmgcc42-2335.15/libcpp/../include/filenames.h:
+
+../../llvmgcc42-2335.15/libcpp/../include/libiberty.h:
+
+../../llvmgcc42-2335.15/libcpp/../include/ansidecl.h:
+
+../../llvmgcc42-2335.15/libcpp/../include/safe-ctype.h:
+
+../../llvmgcc42-2335.15/libcpp/include/mkdeps.h:

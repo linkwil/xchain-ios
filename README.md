@@ -1,30 +1,13 @@
 Based on original documentation by OpenTTD team [Link](http://devs.openttd.org/~truebrain/compile-farm/apple-darwin9.txt)
 
-With these files you may build odcctools and GCC 4.2.1 targetting Darwin/OS X.
+With these files you may build odcctools and GCC 4.2.1 targetting iOS running on POSIX
+(tested on Ubuntu Linux 12.04).
 
-This has been tested in the following environments:
+This has been tested on iOS 4.2.1 on iPhone 3G and iOS 5.1.1 on iPad 3.
 
-* x86_64-pc-linux-gnu with GCC 4.5.3
+How to build:
 
-The following targets have been tested:
-
-* i686-apple-darwin11
-* x86_64-apple-darwin11
-* arm-apple-darwin (requires iOS SDK)
-
-These might work:
-
-* ppc-apple-darwin11
-* ppc64-apple-darwin11
-
-Decide your target, and export:
-
-    export TARGET=i686-apple-darwin11
-
-11 denotes Lion, 10 for Snow Leopard, and 9 for Leopard. These are mostly superficial. All code will run on 10.5 and greater.
-
-Decide your prefix directory and set it to a variable.
-
+    export TARGET=arm-apple-darwin
     export PREFIX=/usr/$TARGET
     mkdir $PREFIX
     cd $PREFIX
@@ -59,67 +42,36 @@ If you are copying from Mac with scp, skip to 'Continue with scp'.
 Download the DMG from Apple for Xcode, any version. You need to have the following:
 
 * Linux kernel built with HFS+ file system driver
-* Catacombae DMGExtractor (requires Java) http://sourceforge.net/projects/catacombae/
-  * Gentoo users: I have an ebuild and prefix: https://github.com/tatsh/tatsh-overlay and once installed, simply run: `emerge app-arch/dmgextractor` to get this
 * p7zip
 * xar
+* tar, gzip, bzip2
 * cpio
 
-Use `mount` and `umount` as root or with `sudo` (probably easier with `sudo`). Example here is with Xcode 4.2. Replace `/mnt/tmp` with your own mount point.
+Use `mount` and `umount` as root or with `sudo` (probably easier with `sudo`):
 
-    cd where-my-xcode-dmg-lives
-    java -jar path/to/dmgextractor.jar xcode_4.2_and_ios_5_sdk_for_snow_leopard.dmg my.iso (click OK on any prompts)
-    # if on Gentoo, you can use `dmgextractor xcode_4.2_and_ios_5_sdk_for_snow_leopard.dmg` my.iso
-    7z x my.iso
-    mount -t hfsplus disk\ image.hfs /mnt/tmp
-    xar -f /mnt/tmp/Packages/MacOSX10.6.pkg Payload
-    cpio -i < Payload
-    umount /mnt/tmp
+    7z x xcode_4.2_and_ios_5_sdk_for_snow_leopard.dmg # should work with any other version
+    
+    sudo mkdir /media/dmg
+    sudo mount -t hfsplus -o loop 5.hfs /media/dmg
+    
+    pushd $PREFIX
+    sudo mkdir SDKs
+    cd SDKs
+    sudo cp /media/dmg/Packages/iPhoneSDK4_3.pkg ./
+    sudo /path/to/xchain-ios/extractpkg.sh iPhoneSDK4_3.pkg
+    sudo mv Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS4.3.sdk ./
+    sudo rm -r iPhoneSDK4_3.pkg Payload Platforms usr
+    sudo umount /media/dmg
 
 You will now have an SDKs directory, but it needs fixing.
 
-    cd SDKs/MacOSX10.6.sdk
-    rm Library/Frameworks
-    ln -s System/Library/Frameworks Library
-    mv Developer/usr/llvm-gcc-4.2 usr
-    rm -r Developer/usr
-    ln -s usr Developer
-
-Copy the prefix:
-
-    cd ../..
-    cp -r SDKs $PREFIX
-
-    cd $PREFIX
-
-Note that we are going to put stuff in this .sdk directory. Anything we build from here will be placed inside. So we are going to create symlinks to its directories in $PREFIX.
-
-    ln -s SDKs/$SDK/Developer
-    ln -s SDKs/$SDK/Library
-    ln -s SDKs/$SDK/System
-    ln -s SDKs/$SDK/usr
+    cd iPhoneOS4.3.sdk
+    sudo ln -s Sysem/Library Library
+    cd ..
+    sudo ln -s SDKs/iPhoneOS4.3.sdk/* ./
+    popd
 
 If you used the no-Mac method, skip to 'Building cctools'.
-
-# Continue with scp
-
-Delete any of YOUR frameworks (these are all from 3rd parties, not Apple). None of these are necessary.
-
-    rm -R Library/Frameworks
-
-Create a symlink to the Apple Frameworks directory.
-
-    cd Library
-    ln -s ../System/Library/Frameworks
-    cd ..
-
-Later on, you can copy the 3rd party frameworks from your Mac to $PREFIX/Library/Frameworks:
-
-    scp -r /Developer/SDKs/MacOSX10.6.sdk/Library/Frameworks/* $PREFIX/Library/Frameworks
-
-`usr` is of great importantance to us in the next steps. It's where cctools and GCC will go. So yes, this `usr` directory (and possibly `Library`) will eventually be 'dirty' and non-equivalent to the one in OS X (and in the next steps we will overwrite files in the directory).
-
-Never copy the SDK directory back to OS X for any reason.
 
 # Building cctools
 
@@ -132,7 +84,7 @@ You really should only apply the patch if you are not on OS X/Darwin, because I 
     chmod +x configure
     CFLAGS="-m32" LDFLAGS="-m32" ./configure --prefix=$PREFIX/usr --target=$TARGET --with-sysroot=$PREFIX
     make
-    make install
+    sudo make install
     cd ..
 
 Note `-m32`. Everything will be 32-bit. Building for 64-bit is not supported (but using 32-bit to build 64-bit binaries is). Do not try optimisation flags. `ranlib` is especially sensitive.
@@ -152,115 +104,27 @@ To build GCC we cannot use what's known as 'classic' `ld`. We have to use `ld64`
 
 Do not try optimisation flags here either.
 
-Set `$PATH` to have your new tools. You may want to add this to your `~/.bashrc` or similar.
+When making in the cctools-806 and odcctools-9.2-ld directory, there may be errors.
+You can fix them by adding the appropriate declarations (structs and enums) to
+`mach-o/arm/reloc.h` and `mach-o/loader.h`, and/or commenting out as many function
+declarations as needed in `include/stuff/bytesex.h`
+
+Export `$PATH` to have your new tools. You may want to add this to your `~/.bashrc` or similar.
 
     export PATH="$PATH:/usr/$TARGET/usr/bin"
 
-# Building GCC
+# Building LLVM-GCC
 
-Now you can proceed to build GCC, but it must be patched first. Patches are located in `patches`.
-
-    wget http://opensource.apple.com/tarballs/gcc/gcc-5666.3.tar.gz
-    tar xvf gcc-5666.3.tar.gz
-    cd gcc-5666.3
-    patch -p1 < ../patches/gcc-5666.3-cflags.patch
-
-Apply if you are annoyed by the default directory structure:
-
-    patch -p1 < ../patches/gcc-5666.3-tooldir.patch
-
-After patching, I recommend building outside of the source of GCC.
-
-    cd ..
-    mkdir gcc-build
-    cd gcc-build
-
-    CFLAGS="-m32" CXXFLAGS="$CFLAGS" LDFLAGS="-m32" \
-        ../gcc-5666.3/configure --prefix=$PREFIX/usr \
-        --disable-checking \
-        --enable-languages=c,objc,c++,obj-c++ \
-        --with-as=$PREFIX/usr/bin/$TARGET-as \
-        --with-ld=$PREFIX/usr/bin/$TARGET-ld64 \
-        --target=$TARGET \
-        --with-sysroot=$PREFIX \
-        --enable-static \
-        --enable-shared \
-        --enable-nls \
-        --disable-multilib \
-        --disable-werror \
-        --enable-libgomp \
-        --with-gxx-include-dir=$PREFIX/usr/include/c++/4.2.1 \
-        --with-ranlib=$PREFIX/usr/bin/$TARGET-ranlib \
-        --with-lipo=$PREFIX/usr/bin/$TARGET-lipo
-
-Optimisations do work here (most of the time). You can try to configure with:
-
-    CFLAGS="-m32 -O2 -msse2"
-
-No, there is no Java (GCJ) or Fortran!
-
-Make and install like normal.
-
-    make
-    make install
-
-Sometimes you may get an issue about ranlib not working or lipo, which is why `--with-ranlib` and `--with-lipo` are appended to `./configure`. However, you may have to run `make` again or not use a `-j` flag. I would recommend not using the `-j` flag anyway just to ease debugging of any issues. Seriously, try doing `make` over and over until it does work.
-
-If `ranlib` has a buffer overflow during build, it is probably because you enabled optimisation flags.
-
-# Hack to fix include path
-
-    export LAST=$PWD
-    cd $PREFIX/usr/local
-    ln -s ../lib/gcc/$TARGET/4.2.1/include
-    cd $LAST
-
-# Test GCC
-
-From the cloned source:
-
-    $TARGET-gcc -o msg msg.m \
-        -fconstant-string-class=NSConstantString \
-        -lobjc -framework Foundation
-
-Test C++:
-
-    $TARGET-g++ -o msgcpp msg.cpp -I$PREFIX/usr/include/c++/4.2.1
-
-I know, that's a weird `-I` flag. For now, just use an alias for `$TARGET-g++` with it. You can safely alias `$TARGET-gcc` as well with `-fconstant-string-class=NSConstantString` even if you are compiling C.
-
-    file msg
-    
-Output:
-
-    msg: Mach-O executable i386
-
-Copying to Mac and executing with ssh:
-
-    scp msg myname@mymac:
-    ssh myname@mymac ./msg
-    scp msgcpp myname@mymac:
-    ssh myname@mymac ./msgcpp
-    
-Output:
-
-    2011-09-03 03:51:52.887 msg[31266:1007] Are you John smith?
-    2011-09-03 03:51:52.889 msg[31266:1007] My message
-    This was compiled on a non-Mac!
-
-# Optional: Building LLVM-GCC
-
-Because LLVM is the future right?
+Because LLVM is the future right? Anyways, the iOS toolchain works only with LLVM-GCC.
 
 First, force the use of ld64 everywhere (yes you can keep this as permanent):
 
-    export LAST=$PWD
-    cd $PREFIX/usr/bin
+    pushd $PREFIX/usr/bin
     mv $TARGET-ld $TARGET-ld.classic
     ln -s $TARGET-ld64 $TARGET-ld
-    cd $LAST
+    popd
 
-You need to build Apple's LLVM first.
+You need to build Apple's LLVM-core itself first.
 
     wget http://opensource.apple.com/tarballs/llvmgcc42/llvmgcc42-2335.15.tar.gz
     tar xvf llvmgcc42-2335.15.tar.gz
@@ -273,12 +137,20 @@ You need to build Apple's LLVM first.
         --disable-assertions \
         --target=$TARGET
     make
-    make install # optional
+    sudo make install
     cd ..
 
 This is somewhat intensive (lots of C++) so if you don't have a powerful PC do not use `-j` flag with `make`.
+Here also may be errors complaining about something like `ptrdiff_t doesn't name a type` or
+`NULL was not declared in this scope`. Solution:
+find the file which the compiler error describes, and insert
 
-Next, proceed to build GCC itself, but you need to patch one thing (at least needed GCC 4.5):
+    #include <cstddef>
+    
+somewhere at the top of the file, among the other includes. This file contains the declaration
+of both `ptrdiff_t` and `NULL`.
+
+Next, proceed to build GCC itself, but you need to patch one thing (at least needed GCC 4.5 and 4.6):
 
     cd llvmgcc42-2335.15
     patch -p0 < ../patches/llvmgcc42-2335.15-redundant.patch
@@ -289,90 +161,11 @@ Build outside the directory.
 
     mkdir llvmgcc-build
     cd llvmgcc-build
-    CFLAGS="-m32" CXXFLAGS="$CFLAGS" LDFLAGS="-m32" \
-        ../llvmgcc42-2335.15/configure \
-        --target=$TARGET \
-        --with-sysroot=$PREFIX \
-        --prefix=$PREFIX/usr \
-        --enable-languages=objc,c++,obj-c++ \
-        --disable-bootstrap \
-        --enable--checking \
-        --enable-llvm=$PWD/../llvm-obj \
-        --enable-shared \
-        --enable-static \
-        --enable-libgomp \
-        --disable-werror \
-        --disable-multilib \
-        --program-transform-name=/^[cg][^.-]*$/s/$/-4.2/ \
-        --with-gxx-include-dir=$PREFIX/usr/include/c++/4.2.1 \
-        --program-prefix=$TARGET-llvm- \
-        --with-slibdir=$PREFIX/usr/lib \
-        --with-ld=$PREFIX/usr/bin/$TARGET-ld64 \
-        --with-tune=generic \
-        --with-as=$PREFIX/usr/bin/$TARGET-as \
-        --with-ranlib=$PREFIX/usr/bin/$TARGET-ranlib \
-        --with-lipo=$PREFIX/usr/bin/$TARGET-lipo
-    make
-    make install
-
-Test:
-
-    export LAST=$PWD
-    cd $PREFIX/usr/bin
-    ln -s $TARGET-as as
-    cd $LAST
-    cd ..
-    PATH="$PREFIX/usr/bin" $TARGET-llvm-gcc -o msg msg.m \
-        -fconstant-string-class=NSConstantString \
-        -lobjc -framework Foundation
-    PATH="$PREFIX/usr/bin" $TARGET-llvm-g++ -o msgcpp msg.cpp \
-        -I$PREFIX/usr/include/c++/4.2.1
-
-I know, yet again C++ paths fail to work.
-
-Ignore all warnings.
-
-# Distcc
-
-Distcc for Gentoo (not for Objective-C or C++ yet due to default argument issues):
-Follow these instructions:
-
-[Gentoo Distcc Guide](http://www.gentoo.org/doc/en/distcc.xml)
-[Gentoo Cross-compiling with Distcc Guide](http://www.gentoo.org/doc/en/cross-compiling-distcc.xml) (with your target being OS X Prefix)
-
-# What works for me
-
-* `CFLAGS="-O2 -msse2 -pipe -m32"` for building llvm-GCC and regular GCC
-* `make -j3` works for everything for me
-
-# iPhone
-
-This is with a default install of Xcode 4.1.1 from the Mac App Store. You can also try the non-Mac method to get the equivalent file.
-
-Follow the above instructions but rather than 10.7 or 10.6 SDK, copy the iOS 4.3 SDK:
-
-    scp -r myname@mymac:/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS4.3.sdk .
-    export TARGET="arm-apple-darwin"
-    export PREFIX="/usr/$TARGET"
-
-Build cctools and ld64. Do not build GCC. Instead build LLVM as described above.
-
-cctools for Gentoo the easy way (as root, example amd64 architecture):
-
-    export OVERLAY="/usr/tatsh-overlay" # or where you want it
-    git clone git://github.com/tatsh/tatsh-overlay.git $OVERLAY
-    echo "$PORTDIR_OVERLAY=\"\$PORTDIR_OVERLAY $OVERLAY\"" >> /etc/make.conf
-    eix-update # optional, only if you have eix installed
-    echo 'cross-arm-apple-darwin/cctools ~amd64' >> /etc/portage/package.keywords
-    emerge cross-arm-apple-darwin/cctools
-
-The difference comes in building LLVM GCC. Use LLVM-GCC from Apple's site, apply the patches as described, but build with the following arguments to `./configure` (note lack of `-m32`):
-
     ../llvmgcc42-2335.15/configure \
         --target=$TARGET \
         --with-sysroot=$PREFIX \
         --prefix=$PREFIX/usr \
-        --enable-languages=objc,c++,obj-c++ \
+        --enable-languages=c,c++,objc,obj-c++ \
         --disable-bootstrap \
         --enable--checking \
         --enable-llvm=$PWD/../llvm-obj \
@@ -389,11 +182,12 @@ The difference comes in building LLVM GCC. Use LLVM-GCC from Apple's site, apply
         --with-as=$PREFIX/usr/bin/$TARGET-as \
         --with-ranlib=$PREFIX/usr/bin/$TARGET-ranlib \
         --with-lipo=$PREFIX/usr/bin/$TARGET-lipo \
+        --with-ar=$PREFIX/usr/bin/$TARGET-ar \
         --enable-sjlj-exceptions
     make
-    make install
+    sudo make install
 
-This will fix g++:
+Then will fix g++:
 
     cd $PREFIX/usr/lib
     ln -s libgcc_s.1.dylib libgcc_s.10.4.dylib
@@ -402,7 +196,7 @@ This will make it a little more sane:
 
     cd $PREFIX/usr/bin
     ln -s arm-apple-darwin-gcc-4.2.1 arm-apple-darwin-gcc
-    ln -s arm-apple-darwin-g++-4.2.1 arm-apple-darwin-g++
+    ln -s arm-apple-darwin-llvm-g++ arm-apple-darwin-g++
 
 You will have a working compiler targetting iOS. You need a jailbroken phone before any code will run. Works for me.
 
@@ -412,15 +206,21 @@ Try:
     arm-apple-darwin-g++ -o msg.arm msg.cpp \
         -I$PREFIX/usr/include/c++/4.2.1 \
         -I$PREFIX/usr/include/c++/4.2.1/armv6-apple-darwin10
+    # Fake codesign if needed:
+    # ldid -S msg.arm
     scp msg.arm root@My_iPhone:
     ssh root@My_iPhone ./msg.arm
-    
+
 Output:
 
     Darwin My_iPhone 11.0.0 Darwin Kernel Version 11.0.0: Wed Mar 30 18:51:10 PDT 2011; root:xnu-1735.46~10/RELEASE_ARM_S5L8930X iPhone3,1 arm N90AP Darwin
     This was compiled on a non-Mac!
 
 Note that you need both of those include path arguments. Yes, it's an ongoing issue.
+
+You can copmile Objective-C(++) too:
+
+    arm-apple-darwin-gcc -o msg2.arm msg.m -lobjc -framework Foundation
 
 Also note that the minimum version to run any code is iOS 3.0 by default. To get 2.0 support for example, use `-miphoneos-version-min=2.0` in your line:
 
@@ -488,3 +288,5 @@ Output:
 * Get latest cctools to build on Linux (DONE except for cbtlibs, efitools, gprof; these are probably unnecessary)
 * Clang
 * HOWTO generate .app directory, plist, Resources, etc (nib files and CoreData impossible without Mac?)
+* Provide even more patch files to avoid compiler errors
+

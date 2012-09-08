@@ -39,38 +39,38 @@
 #define __mq mq
 #define __pad0 pad0
 #define __pad1 pad1
-#define __r0 r0
-#define __r1 r1
-#define __r10 r10
-#define __r11 r11
-#define __r12 r12
-#define __r13 r13
-#define __r14 r14
-#define __r15 r15
-#define __r16 r16
-#define __r17 r17
-#define __r18 r18
-#define __r19 r19
-#define __r2 r2
-#define __r20 r20
-#define __r21 r21
-#define __r22 r22
-#define __r23 r23
-#define __r24 r24
-#define __r25 r25
-#define __r26 r26
-#define __r27 r27
-#define __r28 r28
-#define __r29 r29
-#define __r3 r3
-#define __r30 r30
-#define __r31 r31
-#define __r4 r4
-#define __r5 r5
-#define __r6 r6
-#define __r7 r7
-#define __r8 r8
-#define __r9 r9
+#define r0 r0
+#define r1 r1
+#define r10 r10
+#define r11 r11
+#define r12 r12
+#define r13 r13
+#define r14 r14
+#define r15 r15
+#define r16 r16
+#define r17 r17
+#define r18 r18
+#define r19 r19
+#define r2 r2
+#define r20 r20
+#define r21 r21
+#define r22 r22
+#define r23 r23
+#define r24 r24
+#define r25 r25
+#define r26 r26
+#define r27 r27
+#define r28 r28
+#define r29 r29
+#define r3 r3
+#define r30 r30
+#define r31 r31
+#define r4 r4
+#define r5 r5
+#define r6 r6
+#define r7 r7
+#define r8 r8
+#define r9 r9
 #define __srr0 srr0
 #define __srr1 srr1
 #define __vrsave vrsave
@@ -145,7 +145,7 @@
 #define __ovrfl ovrfl
 #define __pc pc
 #define __precis precis
-#define __rc rc
+#define rc rc
 #define __ss ss
 #define __stkflt stkflt
 #define __tos tos
@@ -154,24 +154,24 @@
 #define __xmm_reg xmm_reg
 #define __zdiv zdiv
 
-#define __rax rax
-#define __rbx rbx
-#define __rcx rcx
-#define __rdx rdx
-#define __rdi rdi
-#define __rsi rsi
-#define __rbp rbp
-#define __rsp rsp
-#define __r8 r8
-#define __r9 r9
-#define __r10 r10
-#define __r11 r11
-#define __r12 r12
-#define __r13 r13
-#define __r14 r14
-#define __r15 r15
-#define __rip rip
-#define __rflags rflags
+#define rax rax
+#define rbx rbx
+#define rcx rcx
+#define rdx rdx
+#define rdi rdi
+#define rsi rsi
+#define rbp rbp
+#define rsp rsp
+#define r8 r8
+#define r9 r9
+#define r10 r10
+#define r11 r11
+#define r12 r12
+#define r13 r13
+#define r14 r14
+#define r15 r15
+#define rip rip
+#define rflags rflags
 
 #define __dr0 dr0
 #define __dr1 dr1
@@ -2338,11 +2338,11 @@ enum byte_sex target_byte_sex)
     int i;
 
 	for(i = 0; i < 13; i++)
-	    cpu->__r[i] = SWAP_INT(cpu->__r[i]);
-	cpu->__sp = SWAP_INT(cpu->__sp);
+	    cpu->r[i] = SWAP_INT(cpu->r[i]);
+	cpu->sp = SWAP_INT(cpu->sp);
 	cpu->__lr = SWAP_INT(cpu->__lr);
 	cpu->__pc = SWAP_INT(cpu->__pc);
-	cpu->__cpsr = SWAP_INT(cpu->__cpsr);
+	cpu->cpsr = SWAP_INT(cpu->cpsr);
 }
 
 __private_extern__

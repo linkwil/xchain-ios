@@ -1,0 +1,2 @@
+#!/bin/sh
+exec /usr/arm-apple-darwin/usr/bin/arm-apple-darwin-as "$@"

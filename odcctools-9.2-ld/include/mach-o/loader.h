@@ -265,6 +265,21 @@ struct load_command {
 #define LC_SEGMENT_SPLIT_INFO 0x1e /* local of info to split segments */
 #define LC_REEXPORT_DYLIB (0x1f | LC_REQ_DYLD) /* load and re-export dylib */
 
+/** H2CO3 hack
+ */
+#define	LC_LAZY_LOAD_DYLIB 0x20	/* delay load of dylib until first use */
+#define	LC_ENCRYPTION_INFO 0x21	/* encrypted segment information */
+#define	LC_DYLD_INFO 	0x22	/* compressed dyld information */
+#define	LC_DYLD_INFO_ONLY (0x22|LC_REQ_DYLD)	/* compressed dyld information only */
+#define	LC_LOAD_UPWARD_DYLIB (0x23 | LC_REQ_DYLD) /* load upward dylib */
+#define LC_VERSION_MIN_MACOSX 0x24   /* build for MacOSX min OS version */
+#define LC_VERSION_MIN_IPHONEOS 0x25 /* build for iPhoneOS min OS version */
+#define LC_FUNCTION_STARTS 0x26 /* compressed table of function start addresses */
+#define LC_DYLD_ENVIRONMENT 0x27 /* string for dyld to treat
+				    like environment variable */
+/** End of H2CO3 hack
+ */
+
 /*
  * A variable length string in a load command is represented by an lc_str
  * union.  The strings are stored just after the load command structure and
@@ -415,6 +430,22 @@ struct section_64 { /* for 64-bit architectures */
 #define	S_8BYTE_LITERALS	0x4	/* section with only 8 byte literals */
 #define	S_LITERAL_POINTERS	0x5	/* section with only pointers to */
 					/*  literals */
+
+/** H2CO3 hack
+ */
+					
+enum { 
+	S_LAZY_DYLIB_SYMBOL_POINTERS = 0x10U,
+	S_THREAD_LOCAL_REGULAR = 0x11U,
+	S_THREAD_LOCAL_ZEROFILL = 0x12U,
+	S_THREAD_LOCAL_VARIABLES = 0x13U,
+	S_THREAD_LOCAL_VARIABLE_POINTERS = 0x14U,
+	S_THREAD_LOCAL_INIT_FUNCTION_POINTERS = 0x15U,
+	LAST_KNOWN_SECTION_TYPE = S_THREAD_LOCAL_INIT_FUNCTION_POINTERS
+};
+/** End of H2CO3 hack
+ */
+
 /*
  * For the two types of symbol pointers sections and the symbol stubs section
  * they have indirect symbol table entries.  For each of the entries in the
