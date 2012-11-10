@@ -1,3 +1,0 @@
-@set version-GCC 4.2.1
-@clear DEVELOPMENT
-@set srcdir ../../llvmgcc42-2335.15/gcc

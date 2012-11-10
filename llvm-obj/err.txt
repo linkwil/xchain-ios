@@ -1,2 +1,0 @@
-make[1]: *** [/home/h2co3/xchain/llvm-obj/lib/VMCore/Release-Asserts/AsmWriter.o] Interrupt
-make: *** [all] Interrupt
