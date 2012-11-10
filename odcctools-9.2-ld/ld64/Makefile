@@ -11,7 +11,7 @@ VPATH = ./src
 
 CC              = gcc
 CXX             = g++
-CFLAGS          = -m32 -Wall -fno-builtin-round -fno-builtin-trunc -g -O2
+CFLAGS          = -m32 -fno-builtin-round -fno-builtin-trunc -g -O2
 WARNINGS	=  -Wall -Wno-long-double -Wno-import
 MDYNAMICNOPIC   = 
 CPPFLAGS        = 

@@ -578,7 +578,7 @@ char *envp[])
 		    asprintf(&p, "dylib_%s", p);
 
 		switch(*p){
-		case 'B': 
+		case 'B':
 		    if(strcmp(p, "Bstatic") && strcmp(p, "Bdynamic")) goto unknown_flag;
 		    break;
 		case 'l':
@@ -2377,7 +2377,7 @@ unknown_flag:
 				seg_addr_table_entry->segs_read_write_addr;
 			if(segs_read_only_addr == 0 &&
 			   segs_read_write_addr == 0){
-			    segs_read_write_addr = get_shared_region_sz_from_flag(&arch_flag);
+			    segs_read_write_addr = get_shared_region_size_from_flag(&arch_flag);
 			    warning("-segs_read_write_addr 0x0 ignored from "
 				    "segment address table: %s %s line %lu "
 				    "using -segs_read_write_addr 0x%x",
@@ -2547,13 +2547,13 @@ unknown_flag:
 				    "-segs_read_write_addr 0x%x because "
 				    "LD_SPLITSEGS_NEW_LIBRARIES environment is "
 				    "set",(unsigned int)seg1addr, 0,
-				    get_shared_region_sz_from_flag(&arch_flag));
+				    get_shared_region_size_from_flag(&arch_flag));
 			}
 			seg1addr_specified = FALSE;
 			seg1addr = 0;
 			segs_read_only_addr_specified = TRUE;
 			segs_read_only_addr = 0;
-			segs_read_write_addr = get_shared_region_sz_from_flag(&arch_flag);
+			segs_read_write_addr = get_shared_region_size_from_flag(&arch_flag);
 		    }
 		    /*
 		     * Finally if this is not a split library then turn off

@@ -16,6 +16,7 @@ along with this program; if not, write to the Free Software
 Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
 
 #include <stdlib.h>
+#include <stdint.h>
 #include "obstack.h"
 
 #ifdef __STDC__
@@ -56,7 +57,7 @@ _obstack_begin(
 struct obstack *h,
 int size,
 int alignment,
-void *(*chunkfun)(long n),
+void *(*chunkfun)(size_t n),
 void (*freefun)() )
 {
   register struct _obstack_chunk* chunk; /* points to new chunk */

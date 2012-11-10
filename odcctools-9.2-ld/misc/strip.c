@@ -2,14 +2,14 @@
  * Copyright (c) 1999 Apple Computer, Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
- * 
+ *
  * This file contains Original Code and/or Modifications of Original Code
  * as defined in and that are subject to the Apple Public Source License
  * Version 2.0 (the 'License'). You may not use this file except in
  * compliance with the License. Please obtain a copy of the License at
  * http://www.opensource.apple.com/apsl/ and read it before using this
  * file.
- * 
+ *
  * The Original Code and all software distributed under the License are
  * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
  * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
@@ -17,7 +17,7 @@
  * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
  * Please see the License for the specific language governing rights and
  * limitations under the License.
- * 
+ *
  * @APPLE_LICENSE_HEADER_END@
  */
 /*
@@ -42,7 +42,7 @@
 #include "stuff/breakout.h"
 #include "stuff/allocate.h"
 #include "stuff/errors.h"
-#include "stuff/round.h"
+#include "stuff/rnd.h"
 #include "stuff/reloc.h"
 #include "stuff/reloc.h"
 #include "stuff/symbol_list.h"
@@ -474,7 +474,7 @@ char *envp[])
 	}
 	if(args_left == 0)
 	    files_specified += argc - (i + 1);
-	
+
 	if(files_specified > 1 && output_file != NULL){
 	    error("-o <filename> can only be used when one file is specified");
 	    usage();
@@ -627,7 +627,7 @@ enum bool all_archs)
 	     * In UNIX standard conformance mode we are not allowed to replace
 	     * a file that is not writeable.
 	     */
-	    if(unix_standard_mode == TRUE && 
+	    if(unix_standard_mode == TRUE &&
 	       access(input_file, W_OK) == -1){
 		system_error("file: %s is not writable", input_file);
 		goto strip_file_return;
@@ -845,10 +845,10 @@ enum bool all_archs)
 			archs[i].toc_long_name = TRUE;
 		    }
 		    if(archs[i].members[j].object != NULL){
-			size += 
+			size +=
 			   round(archs[i].members[j].object->object_size -
 			     archs[i].members[j].object->input_sym_info_size +
-			     archs[i].members[j].object->output_sym_info_size, 
+			     archs[i].members[j].object->output_sym_info_size,
 			     8);
 			sprintf(archs[i].members[j].ar_hdr->ar_size, "%-*ld",
 			       (int)sizeof(archs[i].members[j].ar_hdr->ar_size),
@@ -1005,7 +1005,7 @@ struct object *object)
 		swap_dylib_reference(refs, nextrefsyms, host_byte_sex);
 	    }
 #ifndef NMEDIT
-	    /* 
+	    /*
 	     * In the -c flag is specified then strip the section contents of
 	     * this dynamic library and change it into a stub library.  When
 	     * creating a stub library the timestamp is not changed.
@@ -1043,7 +1043,7 @@ struct object *object)
 				 * section has.  This is a bit odd but programs
 				 * dealing with MH_DYLIB_STUB filetypes special
 				 * case this.
-				 */ 
+				 */
 				section_type = s[j].flags & SECTION_TYPE;
 				if(section_type != S_SYMBOL_STUBS &&
 				   section_type != S_LAZY_SYMBOL_POINTERS &&
@@ -1078,7 +1078,7 @@ struct object *object)
 				 * section has.  This is a bit odd but programs
 				 * dealing with MH_DYLIB_STUB filetypes special
 				 * case this.
-				 */ 
+				 */
 				section_type = s64[j].flags & SECTION_TYPE;
 				if(section_type != S_SYMBOL_STUBS &&
 				   section_type != S_LAZY_SYMBOL_POINTERS &&
@@ -1112,7 +1112,7 @@ struct object *object)
 		     * Set the file offset to the link edit information to be
 		     * right after the load commands.
 		     */
-		    object->seg_linkedit->fileoff = 
+		    object->seg_linkedit->fileoff =
 			sizeof(struct mach_header) +
 			object->mh->sizeofcmds;
 		}
@@ -1124,7 +1124,7 @@ struct object *object)
 		     * Set the file offset to the link edit information to be
 		     * right after the load commands.
 		     */
-		    object->seg_linkedit64->fileoff = 
+		    object->seg_linkedit64->fileoff =
 			sizeof(struct mach_header_64) +
 			object->mh64->sizeofcmds;
 		}
@@ -1182,7 +1182,7 @@ struct object *object)
 
 #ifndef NMEDIT
 	if(sfile != NULL || Rfile != NULL || dfile != NULL || Aflag || uflag ||
-	   Sflag || xflag || Xflag || nflag || rflag || 
+	   Sflag || xflag || Xflag || nflag || rflag ||
 	   default_dyld_executable || object->mh_filetype == MH_DYLIB ||
 	   object->mh_filetype == MH_DYLINKER)
 #endif /* !defined(NMEDIT) */
@@ -1209,7 +1209,7 @@ struct object *object)
 		    new_nsyms * sizeof(struct nlist_64) +
 		    new_strsize;
 
-	    object->st->nsyms = new_nsyms; 
+	    object->st->nsyms = new_nsyms;
 	    object->st->strsize = new_strsize;
 
 	    if(object->mh != NULL)
@@ -1223,7 +1223,7 @@ struct object *object)
 	    if(object->split_info_cmd != NULL){
 		object->output_split_info_data = object->object_addr +
 		    object->split_info_cmd->dataoff;
-		object->output_split_info_data_size = 
+		object->output_split_info_data_size =
 		    object->split_info_cmd->datasize;
 	    }
 	    if(object->code_sig_cmd != NULL){
@@ -1233,7 +1233,7 @@ struct object *object)
 		{
 		    object->output_code_sig_data = object->object_addr +
 			object->code_sig_cmd->dataoff;
-		    object->output_code_sig_data_size = 
+		    object->output_code_sig_data_size =
 			object->code_sig_cmd->datasize;
 		}
 	    }
@@ -1316,7 +1316,7 @@ struct object *object)
 		 * dynamic library stub the relocation info also gets
 		 * stripped.
 		 */
-		if(!cflag) 
+		if(!cflag)
 #endif /* !(NMEDIT) */
 		{
 		    object->output_sym_info_size +=
@@ -1405,7 +1405,7 @@ struct object *object)
 		    if(object->st->strsize != 0 &&
 		       object->st->stroff < offset)
 			offset = object->st->stroff;
-		} 
+		}
 
 		if(object->dyst->nlocrel != 0){
 		    object->output_loc_relocs = (struct relocation_info *)
@@ -1657,7 +1657,7 @@ struct object *object)
 	 * Check and update the external relocation entries to make sure
 	 * referenced symbols are not stripped and refer to the new symbol
 	 * table indexes.
-	 * 
+	 *
 	 * The external relocation entries can be located in one of two places,
 	 * first off of the sections or second off of the dynamic symtab.
 	 */
@@ -1910,7 +1910,7 @@ enum byte_sex host_byte_sex)
     uint64_t n_value;
 #ifdef NMEDIT
     unsigned long value, n_ext;
-    uint64_t value64; 
+    uint64_t value64;
 #endif
     struct scattered_relocation_info *sreloc;
 
@@ -2394,7 +2394,7 @@ unsigned long nindirectsyms)
 		/*
 		 * strip -x or -X on an x86_64 .o file should do nothing.
 		 */
-		if(object->mh == NULL && 
+		if(object->mh == NULL &&
 		   object->mh64->cputype == CPU_TYPE_X86_64 &&
 		   object->mh64->filetype == MH_OBJECT &&
 		   (xflag == 1 || Xflag == 1)){
@@ -2474,7 +2474,7 @@ unsigned long nindirectsyms)
 				 */
 				if((mh_flags & MH_DYLDLINK) != MH_DYLDLINK ||
 				   (n_type & N_TYPE) != N_SECT ||
-			   	   (s_flags & S_ATTR_STRIP_STATIC_SYMS) != 
+			   	   (s_flags & S_ATTR_STRIP_STATIC_SYMS) !=
 					      S_ATTR_STRIP_STATIC_SYMS){
 				    new_strsize += strlen(strings + n_strx) + 1;
 				    new_nlocalsym++;
@@ -3357,7 +3357,7 @@ struct object *object)
 	 */
 	memcpy(arch->object->load_commands, new_load_commands, sizeofcmds);
 	if(mh_sizeofcmds > sizeofcmds){
-		memset((char *)arch->object->load_commands + sizeofcmds, '\0', 
+		memset((char *)arch->object->load_commands + sizeofcmds, '\0',
 			   (mh_sizeofcmds - sizeofcmds));
 	}
 	ncmds -= nuuids;
@@ -3462,7 +3462,7 @@ struct object *object)
 	 */
 	memcpy(arch->object->load_commands, new_load_commands, sizeofcmds);
 	if(mh_sizeofcmds > sizeofcmds){
-		memset((char *)arch->object->load_commands + sizeofcmds, '\0', 
+		memset((char *)arch->object->load_commands + sizeofcmds, '\0',
 			   (mh_sizeofcmds - sizeofcmds));
 	}
 	ncmds -= 1;

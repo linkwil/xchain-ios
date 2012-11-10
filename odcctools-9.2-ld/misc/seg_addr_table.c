@@ -2,14 +2,14 @@
  * Copyright (c) 2003 Apple Computer, Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
- * 
+ *
  * This file contains Original Code and/or Modifications of Original Code
  * as defined in and that are subject to the Apple Public Source License
  * Version 2.0 (the 'License'). You may not use this file except in
  * compliance with the License. Please obtain a copy of the License at
  * http://www.opensource.apple.com/apsl/ and read it before using this
  * file.
- * 
+ *
  * The Original Code and all software distributed under the License are
  * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
  * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
@@ -17,7 +17,7 @@
  * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
  * Please see the License for the specific language governing rights and
  * limitations under the License.
- * 
+ *
  * @APPLE_LICENSE_HEADER_END@
  */
 #include <stdio.h>
@@ -30,7 +30,7 @@
 
 #include "stuff/ofile.h"
 #include "stuff/allocate.h"
-#include "stuff/round.h"
+#include "stuff/rnd.h"
 #include "stuff/errors.h"
 #include "stuff/seg_addr_table.h"
 #include "stuff/guess_short_name.h"
@@ -72,7 +72,7 @@
 #define MAX_ADDR 0xc0000000
 
 /*
- * These are just used in the layout info structs created in the 
+ * These are just used in the layout info structs created in the
  * sorted_flat_layout_info array so that next_flat_seg1addr() will step over
  * them.
  */
@@ -161,7 +161,7 @@ struct info {
 
     /* Address in the flat region where debug/profile libs will be placed */
     unsigned long debug_seg1addr;
-    
+
     /* read-only and read-write segment addresses for split images*/
     unsigned long start_segs_read_only_addr;
     unsigned long start_segs_read_write_addr;
@@ -324,7 +324,7 @@ char **envp)
 	from_dylib_table = FALSE;
 	create_dylib_table = FALSE;
 	relayout_nonsplit = FALSE;
-        
+
 	info.output_file_name = NULL;
 	out_fp = NULL;
 
@@ -735,7 +735,7 @@ char **envp)
 	}
 
 	/*
-	 * If the -update, -update_overlap or -checkonly options are 
+	 * If the -update, -update_overlap or -checkonly options are
 	 * specified then pick up the next addresses
 	 * to assign.  The addresses are assigned starting at the
 	 * NEXT_FLAT_ADDRESS_TO_ASSIGN, NEXT_SPLIT_ADDRESS_TO_ASSIGN and
@@ -808,7 +808,7 @@ char **envp)
 	/*
 	 * For the -relayout, -update, -checkonly, -update_overlaps
 	 * and -create options make a  pass through all the entries in
-	 * in the seg_addr_table and determine the short names for each 
+	 * in the seg_addr_table and determine the short names for each
 	 * of the flat entries and determine the maximum size and their
 	 * seg1addr.  For the split libraries just determine
 	 * their maximum size and their segs_read_only_addr and
@@ -824,7 +824,7 @@ char **envp)
 	    used = 0;
 
 	    info.layout_info =
-		allocate(sizeof(struct layout_info *) * 
+		allocate(sizeof(struct layout_info *) *
 				(info.table_size + 2));
 	    memset(info.layout_info, '\0', sizeof(struct layout_info *) *
 					   (info.table_size + 2));
@@ -873,12 +873,12 @@ char **envp)
 	    info.sorted_flat_layout_info[info.nsorted_flat++] =
 		layout_info + used;
 	    /*
-	     * Create a bogus current_entry to keep all current_entry 
+	     * Create a bogus current_entry to keep all current_entry
 	     * pointers valid.
 	     */
-	    layout_info[used].current_entry = 
+	    layout_info[used].current_entry =
 		allocate(sizeof(struct seg_addr_table));
-	    layout_info[used].current_entry->install_name = 
+	    layout_info[used].current_entry->install_name =
 		READ_WRITE_SEGMENT_NAME;
 	    layout_info[used].current_entry->split = FALSE;
 	    layout_info[used].current_entry->seg1addr =
@@ -919,8 +919,8 @@ char **envp)
 			layout_info[used].seg1addr = entry->seg1addr;
 			layout_info[used].max_sizes.all =
 			    entry->segs_read_write_addr;
-			/* 
-			 * Create a current_entry pointer 
+			/*
+			 * Create a current_entry pointer
 			 * for the fixed addresses
 			 */
 			layout_info[used].current_entry = entry;
@@ -974,7 +974,7 @@ char **envp)
                         strcmp(has_suffix, "_profile") == 0))
                         layout_info[used].use_debug_region = TRUE;
                     else
-                        layout_info[used].use_debug_region = FALSE;                    
+                        layout_info[used].use_debug_region = FALSE;
 		    found = FALSE;
 		    for(j = 0; j < used; j++){
 			if(layout_info[j].short_name != NULL &&
@@ -1031,7 +1031,7 @@ char **envp)
 	     * list of flat and split libraries for those things not to be
 	     * reassigned addresses and check for overlaps.
 	     */
-	    qsort(info.sorted_flat_layout_info, info.nsorted_flat, 
+	    qsort(info.sorted_flat_layout_info, info.nsorted_flat,
 		  sizeof(struct layout_info *),
 		  (int (*)(const void *, const void *))qsort_flat);
 #ifdef DEBUG
@@ -1041,10 +1041,10 @@ char **envp)
 		       info.sorted_flat_layout_info[i]->image_file_name);
 	    }
 #endif /* DEBUG */
-	    qsort(info.sorted_split_read_only_layout_info, info.nsorted_split, 
+	    qsort(info.sorted_split_read_only_layout_info, info.nsorted_split,
 		  sizeof(struct layout_info *),
 		  (int (*)(const void *, const void *))qsort_split_read_only);
-	    qsort(info.sorted_split_read_write_layout_info, info.nsorted_split, 
+	    qsort(info.sorted_split_read_write_layout_info, info.nsorted_split,
 		  sizeof(struct layout_info *),
 		  (int (*)(const void *, const void *))qsort_split_read_write);
 
@@ -1092,7 +1092,7 @@ char **envp)
 		    else
 			flat_overlap_error(&info, i, ULONG_MAX, TRUE);
 		} else if((info.allocate_flat_increasing == TRUE) &&
-		   (update == TRUE || checkonly == TRUE || 
+		   (update == TRUE || checkonly == TRUE ||
 		    update_overlaps == TRUE) &&
 		   strcmp(info.sorted_flat_layout_info[i]->install_name,
 		   FIXED_ADDRESS_AND_SIZE) != 0 &&
@@ -1101,7 +1101,7 @@ char **envp)
 		   info.seg1addr &&
 		   info.sorted_flat_layout_info[i]->seg1addr < info.seg1addr){
 			if(update_overlaps == TRUE)
-			    /* Zero out the address for the overlap */  
+			    /* Zero out the address for the overlap */
 			    info.sorted_flat_layout_info[i]->
 				current_entry->seg1addr = 0;
 			else
@@ -1124,7 +1124,7 @@ char **envp)
 			    /* Zero out the address for the overlap */
 			    info.sorted_split_read_only_layout_info[i]->
 				current_entry->segs_read_only_addr = 0;
-			else	
+			else
 		 	    split_overlap_error(&info, i, j,
 				info.sorted_split_read_only_layout_info,
 				    "read-only", FALSE);
@@ -1188,7 +1188,7 @@ char **envp)
 		   info.segs_read_write_addr){
 		    if(update_overlaps == TRUE)
 			info.sorted_split_read_write_layout_info[i]->
-			    current_entry->segs_read_write_addr = 0;	
+			    current_entry->segs_read_write_addr = 0;
 		    else
 			split_overlap_error(&info, i, ULONG_MAX,
 			    info.sorted_split_read_write_layout_info,
@@ -1255,7 +1255,7 @@ char **envp)
                             }
                         }
                         else{
-                            info.debug_seg1addr = 
+                            info.debug_seg1addr =
                                         next_debug_seg1addr(&info, size);
                             info.layout_info[i]->seg1addr = info.debug_seg1addr;
                         }
@@ -1264,7 +1264,7 @@ char **envp)
 			    error("address assignment: 0x%x plus size 0x%x for "
 				  "%s greater maximum address 0x%x",
 				  (unsigned int)info.layout_info[i]->seg1addr,
-				  (unsigned int)size, 
+				  (unsigned int)size,
 				  entry->install_name, (unsigned int)MAX_ADDR);
 		    }
 		}
@@ -1273,7 +1273,7 @@ char **envp)
 			info.segs_read_only_addr;
 		    info.layout_info[i]->segs_read_write_addr =
 			info.segs_read_write_addr;
-		    if(info.layout_info[i]->max_sizes.read_only > 
+		    if(info.layout_info[i]->max_sizes.read_only >
 		       info.layout_info[i]->max_sizes.read_write)
 			max = info.layout_info[i]->max_sizes.read_only;
 		    else
@@ -1288,7 +1288,7 @@ char **envp)
 			      "0x%x for %s overflows area to be allocated",
 			      (unsigned int)
 				info.layout_info[i]->segs_read_only_addr,
-			      (unsigned int)size, 
+			      (unsigned int)size,
 			      entry->install_name);
 		    if((info.layout_info[i]->segs_read_write_addr &
 			info.overflow_mask) !=
@@ -1297,7 +1297,7 @@ char **envp)
 			      "0x%x for %s overflows area to be allocated",
 			      (unsigned int)
 				info.layout_info[i]->segs_read_write_addr,
-			      (unsigned int)size, 
+			      (unsigned int)size,
 			      entry->install_name);
                 }
             }
@@ -1321,7 +1321,7 @@ char **envp)
 			info.next_split_line = entry->line;
 		    }
 		}
-	    }   
+	    }
 	    /*
 	     * Now with the addresses assigned write out the new table.
 	     */
@@ -1336,7 +1336,7 @@ char **envp)
 		else
 		    fprintf(out_fp, "\n");
 
-		process_seg_addr_table(info.seg_addr_table_name, out_fp, 
+		process_seg_addr_table(info.seg_addr_table_name, out_fp,
 				       progname, new_table_processor, &info);
 
 		fprintf(out_fp, "#%s: Do not remove the following line, "
@@ -1346,14 +1346,14 @@ char **envp)
 		  	    (unsigned int)info.segs_read_write_addr,
 		    	    NEXT_SPLIT_ADDRESS_TO_ASSIGN);
                /*
-                * If MACOSX_DEPLOYMENT_TARGET is greater then 10.4.  
+                * If MACOSX_DEPLOYMENT_TARGET is greater then 10.4.
                 * Then we need to:
-                * 1. Avoid outputting the NEXT_FLAT_ADDRESS_TO_ASSIGN and 
+                * 1. Avoid outputting the NEXT_FLAT_ADDRESS_TO_ASSIGN and
                 *    NEXT_DEBUG_ADDRESS_TO_ASSIGN.
-                * 2. Check if the we've overflowed the 256 mb region 
+                * 2. Check if the we've overflowed the 256 mb region
                 *    instead of the 128mb region
                 */
-                
+
                if(macosx_deployment_target.major >= 4) {
                    if(info.segs_read_only_addr >
                            info.start_segs_read_only_addr + 0x10000000)
@@ -1401,8 +1401,8 @@ char **envp)
 	 * If the -update or the -update_overlaps option is specified
 	 * then only layout the images in
 	 * the seg_addr_table which had an address of zero.  The addresses are
-	 * assigned starting at the NEXT_FLAT_ADDRESS_TO_ASSIGN, 
-	 * NEXT_DEBUG_ADDRESS_TO_ASSIGN and NEXT_SPLIT_ADDRESS_TO_ASSIGN and 
+	 * assigned starting at the NEXT_FLAT_ADDRESS_TO_ASSIGN,
+	 * NEXT_DEBUG_ADDRESS_TO_ASSIGN and NEXT_SPLIT_ADDRESS_TO_ASSIGN and
 	 * were picked up above.
 	 */
 	if(update == TRUE || update_overlaps == TRUE){
@@ -1440,7 +1440,7 @@ char **envp)
                             }
                         }
                         else{
-                            info.debug_seg1addr = 
+                            info.debug_seg1addr =
                                         next_debug_seg1addr(&info, size);
                             info.layout_info[i]->seg1addr = info.debug_seg1addr;
                         }
@@ -1449,7 +1449,7 @@ char **envp)
 			    error("address assignment: 0x%x plus size 0x%x for "
 				  "%s greater maximum address 0x%x",
 				  (unsigned int)info.layout_info[i]->seg1addr,
-				  (unsigned int)size, 
+				  (unsigned int)size,
 				  entry->install_name, (unsigned int)MAX_ADDR);
 		    }
 		}
@@ -1472,7 +1472,7 @@ char **envp)
 			info.segs_read_only_addr;
 		    info.layout_info[i]->segs_read_write_addr =
 			info.segs_read_write_addr;
-		    if(info.layout_info[i]->max_sizes.read_only > 
+		    if(info.layout_info[i]->max_sizes.read_only >
 		       info.layout_info[i]->max_sizes.read_write)
 			max = info.layout_info[i]->max_sizes.read_only;
 		    else
@@ -1487,7 +1487,7 @@ char **envp)
 			      "0x%x for %s overflows area to be allocated",
 			      (unsigned int)
 				info.layout_info[i]->segs_read_only_addr,
-			      (unsigned int)size, 
+			      (unsigned int)size,
 			      entry->install_name);
 		    if((info.layout_info[i]->segs_read_write_addr &
                        info.overflow_mask) !=
@@ -1496,7 +1496,7 @@ char **envp)
 			      "0x%x for %s overflows area to be allocated",
 			      (unsigned int)
 				info.layout_info[i]->segs_read_write_addr,
-			      (unsigned int)size, 
+			      (unsigned int)size,
 			      entry->install_name);
 		}
 		/*
@@ -1529,7 +1529,7 @@ char **envp)
 		    (unsigned int)info.segs_read_only_addr,
 		    (unsigned int)info.segs_read_write_addr,
 		    NEXT_SPLIT_ADDRESS_TO_ASSIGN);
-	    /* 
+	    /*
 	     * Output the next flat and next debug addresses to assign only
  	     * if the deployment target is less than 10.4.
 	     */
@@ -1567,7 +1567,7 @@ void
 usage(
 void)
 {
-	fprintf(stderr, "Usage: %s [[[-relayout | -update " 
+	fprintf(stderr, "Usage: %s [[[-relayout | -update "
 		"| [-update_overlaps  [-relayout_nonsplit]] -o output_file] |  "
 		"-checkonly ] [-seg_addr_table input_file] "
 		"[-disablewarnings] [-seg1addr hex_address] "
@@ -1622,7 +1622,7 @@ qsort_split_read_only(
 const struct layout_info **p1,
 const struct layout_info **p2)
 {
-	if((*p1)->current_entry->segs_read_only_addr == 
+	if((*p1)->current_entry->segs_read_only_addr ==
 	   (*p2)->current_entry->segs_read_only_addr)
 	    return(0);
 	if((*p1)->current_entry->segs_read_only_addr <
@@ -1644,7 +1644,7 @@ const struct layout_info **p2)
 	if((*p1)->current_entry->segs_read_write_addr ==
 	   (*p2)->current_entry->segs_read_write_addr)
 	    return(0);
-	if((*p1)->current_entry->segs_read_write_addr < 
+	if((*p1)->current_entry->segs_read_write_addr <
 	   (*p2)->current_entry->segs_read_write_addr)
 	    return(-1);
 	return(1);
@@ -1882,11 +1882,11 @@ unsigned long size)
         start = info->sorted_flat_layout_info[j]->seg1addr;
         end = start + info->sorted_flat_layout_info[j]->max_sizes.all;
         if((seg1addr <= start && seg1addr + size > start) ||
-            (seg1addr < end && seg1addr + size > end) || 
+            (seg1addr < end && seg1addr + size > end) ||
             (seg1addr >= start && seg1addr + size <= end)){
 #ifdef DEBUG
             printf("next_debug_seg1addr() stepping back over region "
-                    "start = 0x%x end = 0x%x\n", 
+                    "start = 0x%x end = 0x%x\n",
                     (unsigned int)start, (unsigned int)end);
 #endif
             seg1addr = start;
@@ -2092,7 +2092,7 @@ void *cookie)
 		if(first == NULL){
 		    first = sg;
 		    if(split == FALSE && first->vmaddr != 0){
-			if(layout_info->seg1addr == 0 || 
+			if(layout_info->seg1addr == 0 ||
 			   layout_info->seg1addr == first->vmaddr){
 			    layout_info->seg1addr = first->vmaddr;
 			}

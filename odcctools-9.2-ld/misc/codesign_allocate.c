@@ -2,14 +2,14 @@
  * Copyright (c) 2006 Apple Computer, Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
- * 
+ *
  * This file contains Original Code and/or Modifications of Original Code
  * as defined in and that are subject to the Apple Public Source License
  * Version 2.0 (the 'License'). You may not use this file except in
  * compliance with the License. Please obtain a copy of the License at
  * http://www.opensource.apple.com/apsl/ and read it before using this
  * file.
- * 
+ *
  * The Original Code and all software distributed under the License are
  * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
  * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
@@ -17,7 +17,7 @@
  * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
  * Please see the License for the specific language governing rights and
  * limitations under the License.
- * 
+ *
  * @APPLE_LICENSE_HEADER_END@
  */
 #include <stdio.h>
@@ -26,7 +26,7 @@
 #include <limits.h>
 #include "stuff/errors.h"
 #include "stuff/breakout.h"
-#include "stuff/round.h"
+#include "stuff/rnd.h"
 #include "stuff/allocate.h"
 
 /*
@@ -64,9 +64,9 @@ static struct linkedit_data_command *add_code_sig_load_command(
  * The codesign_allocate(1) tool has the following usage:
  *
  *	codesign_allocate -i oldfile -a arch size ...  -o newfile
- * 
+ *
  * Where the oldfile is a Mach-O file that is input for the dynamic linker
- * and it creates or adds an 
+ * and it creates or adds an
  */
 int
 main(
@@ -195,7 +195,7 @@ unsigned long narchs)
 
 	for(i = 0; i < narchs; i++){
 	    /*
-	     * Given that code signing is "meta" information about the file and 
+	     * Given that code signing is "meta" information about the file and
 	     * so does not really alter the "content" of the Mach-o file.
 	     * codesign_allocate should never update the LC_ID_DYLIB timestamp.
 	     */
@@ -313,9 +313,9 @@ struct object *object)
 	    object->output_loc_relocs = (struct relocation_info *)
 		(object->object_addr + object->dyst->locreloff);
 	    if(object->split_info_cmd != NULL){
-		object->output_split_info_data = 
+		object->output_split_info_data =
 		(object->object_addr + object->split_info_cmd->dataoff);
-		object->output_split_info_data_size = 
+		object->output_split_info_data_size =
 		    object->split_info_cmd->datasize;
 	    }
 	    object->output_ext_relocs = (struct relocation_info *)
@@ -424,7 +424,7 @@ struct object *object)
 	     fatal_arch(arch, member, "file is not input for the dynamic "
 			"linker and can't have a code signature: ");
 	arch_signs[i].found = TRUE;
-	
+
 	/*
 	 * If this has a code signature load command reuse it and just change
 	 * the size of that data.  But do not use the old data.
@@ -591,7 +591,7 @@ char *arch_name)
 	   sizeof(struct mach_header) > low_fileoff)
 	    fatal("can't allocate code signature data for: %s (for architecture"
 		  " %s) because larger updated load commands do not fit (the "
-		  "program must be relinked using a larger -headerpad value)", 
+		  "program must be relinked using a larger -headerpad value)",
 		  arch->file_name, arch_name);
 	/*
 	 * There is space for the new load commands. So just use that space for
@@ -604,7 +604,7 @@ char *arch_name)
 	/* these two feilds will be set by the caller */
 	code_sig->dataoff = 0;
 	code_sig->datasize = 0;
-	
+
         if(arch->object->mh != NULL){
             arch->object->mh->sizeofcmds = sizeofcmds +
 	       sizeof(struct linkedit_data_command);

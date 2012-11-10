@@ -2,14 +2,14 @@
  * Copyright (c) 1999 Apple Computer, Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
- * 
+ *
  * This file contains Original Code and/or Modifications of Original Code
  * as defined in and that are subject to the Apple Public Source License
  * Version 2.0 (the 'License'). You may not use this file except in
  * compliance with the License. Please obtain a copy of the License at
  * http://www.opensource.apple.com/apsl/ and read it before using this
  * file.
- * 
+ *
  * The Original Code and all software distributed under the License are
  * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
  * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
@@ -17,7 +17,7 @@
  * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
  * Please see the License for the specific language governing rights and
  * limitations under the License.
- * 
+ *
  * @APPLE_LICENSE_HEADER_END@
  */
 #ifndef RLD
@@ -92,7 +92,7 @@ int verbose)
 }
 
 /*
- * runlist is used by the routine execute_list() to execute a program and it 
+ * runlist is used by the routine execute_list() to execute a program and it
  * contains the command line arguments.  Strings are added to it by
  * add_execute_list().  The routine reset_execute_list() resets it for new use.
  */
@@ -103,7 +103,7 @@ static struct {
 } runlist;
 
 /*
- * This routine is passed a string to be added to the list of strings for 
+ * This routine is passed a string to be added to the list of strings for
  * command line arguments.
  */
 __private_extern__
@@ -126,7 +126,7 @@ char *str)
 }
 
 /*
- * This routine is passed a string to be added to the list of strings for 
+ * This routine is passed a string to be added to the list of strings for
  * command line arguments and is then prefixed with the path of the executable.
  */
 __private_extern__
@@ -136,6 +136,25 @@ char *str)
 {
 	add_execute_list(cmd_with_prefix(str));
 }
+
+#ifndef HAVE__NSGETEXECUTABLEPATH
+/**
+ * Based on MonetDB's get_bin_path
+ * http://dev.monetdb.org/hg/MonetDB/file/54ad354daff8/common/utils/mutils.c#l340
+ */
+int _NSGetExecutablePath(char *buf, unsigned long *bufsize) {
+#if defined(_MSC_VER)
+	if (GetModuleFileName(NULL, buf, (DWORD)*bufsize) != 0) {
+		return strlen;
+	}
+	return -1;
+#elif defined(HAVE_READLINK) /* Linux */
+	return readlink("/proc/self/exe", buf, *bufsize);
+#else
+	return -1; /* Fail on all other systems for now */
+#endif /* _MSC_VER */
+}
+#endif/* HAVE__NSGETEXECUTABLEPATH */
 
 /*
  * This routine is passed a string of a command name and a string is returned

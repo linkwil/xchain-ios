@@ -22,7 +22,11 @@
  */
 
 // start temp HACK for cross builds
+#ifdef __CYGWIN__
+extern "C" double log2 ( double );
+#else
 extern "C" double log2 ( double ) throw();
+#endif
 #define __MATH__
 // end temp HACK for cross builds
 
@@ -2908,6 +2912,7 @@ ObjectFile::Reader* Linker::createReader(const Options::FileInfo& info)
 			uint32_t fileOffset = OSSwapBigToHostInt32(archs[sliceToUse].offset);
 			len = OSSwapBigToHostInt32(archs[sliceToUse].size);
 			// if requested architecture is page aligned within fat file, then remap just that portion of file
+			/* ... BUT re-map fails on Cygwin... don't know why...
 			if ( (fileOffset & 0x00000FFF) == 0 ) {
 				// unmap whole file
 				munmap((caddr_t)p, info.fileLen);
@@ -2916,9 +2921,9 @@ ObjectFile::Reader* Linker::createReader(const Options::FileInfo& info)
 				if ( p == (uint8_t*)(-1) )
 					throwf("can't re-map file, errno=%d", errno);
 			}
-			else {
+			else { */
 				p = &p[fileOffset];
-			}
+			/* } */
 		}
 	}
 	::close(fd);

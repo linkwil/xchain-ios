@@ -2436,7 +2436,7 @@ AC_DEFUN([AC_PROG_NM],
   lt_cv_path_NM="$NM"
 else
   lt_nm_to_check="${ac_tool_prefix}nm"
-  if test -n "$ac_tool_prefix" && test "$build" = "$host"; then 
+  if test -n "$ac_tool_prefix" && test "$build" = "$host"; then
     lt_nm_to_check="$lt_nm_to_check nm"
   fi
   for lt_tmp_nm in $lt_nm_to_check; do
@@ -2816,7 +2816,15 @@ if test "$GXX" = yes; then
     _LT_AC_TAGVAR(archive_expsym_cmds, $1)='$CC -shared -nostdlib $predep_objects $libobjs $deplibs $postdep_objects $compiler_flags ${wl}-soname $wl$soname ${wl}-retain-symbols-file $wl$export_symbols -o $lib'
 
     _LT_AC_TAGVAR(hardcode_libdir_flag_spec, $1)='${wl}--rpath ${wl}$libdir'
-    _LT_AC_TAGVAR(export_dynamic_flag_spec, $1)='${wl}--export-dynamic'
+
+    case $host_os in
+      mingw*|cygwin*)
+        _LT_AC_TAGVAR(export_dynamic_flag_spec, $1)='${wl}--export-all-symbols'
+        ;;
+      *)
+        _LT_AC_TAGVAR(export_dynamic_flag_spec, $1)='${wl}--export-dynamic'
+        ;;
+    esac
 
     # If archive_cmds runs LD, not CC, wlarc should be empty
     # XXX I think wlarc can be eliminated in ltcf-cxx, but I need to
@@ -5422,7 +5430,16 @@ ifelse([$1],[CXX],[
     # here allows them to be overridden if necessary.
     runpath_var=LD_RUN_PATH
     _LT_AC_TAGVAR(hardcode_libdir_flag_spec, $1)='${wl}--rpath ${wl}$libdir'
-    _LT_AC_TAGVAR(export_dynamic_flag_spec, $1)='${wl}--export-dynamic'
+
+    case $host_os in
+      mingw*|cygwin*)
+        _LT_AC_TAGVAR(export_dynamic_flag_spec, $1)='${wl}--export-all-symbols'
+        ;;
+      *)
+        _LT_AC_TAGVAR(export_dynamic_flag_spec, $1)='${wl}--export-dynamic'
+        ;;
+    esac
+
     # ancient GNU ld didn't support --whole-archive et. al.
     if $LD --help 2>&1 | grep 'no-whole-archive' > /dev/null; then
 	_LT_AC_TAGVAR(whole_archive_flag_spec, $1)="$wlarc"'--whole-archive$convenience '"$wlarc"'--no-whole-archive'
@@ -5585,7 +5602,7 @@ EOF
 
     sysv5* | sco3.2v5* | sco5v6* | unixware* | OpenUNIX*)
       case `$LD -v 2>&1` in
-        *\ [[01]].* | *\ 2.[[0-9]].* | *\ 2.1[[0-5]].*) 
+        *\ [[01]].* | *\ 2.[[0-9]].* | *\ 2.1[[0-5]].*)
 	_LT_AC_TAGVAR(ld_shlibs, $1)=no
 	cat <<_LT_EOF 1>&2
 

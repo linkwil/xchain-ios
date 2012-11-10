@@ -515,13 +515,13 @@ if test -z "$show_help"; then
 	  qCC="$qCC $argu"
         fi
       done
-      # APPLE LOCAL end handle ~ in pathnames 2002-01-14 --sts 
+      # APPLE LOCAL end handle ~ in pathnames 2002-01-14 --sts
       case $base_compile in
-      # APPLE LOCAL handle ~ in pathnames 2002-01-14 --sts 
+      # APPLE LOCAL handle ~ in pathnames 2002-01-14 --sts
       "$qCC "*) ;;
       # Blanks in the command may have been stripped by the calling shell,
       # but not from the CC environment variable when ltconfig was run.
-      # APPLE LOCAL handle ~ in pathnames 2002-01-14 --sts 
+      # APPLE LOCAL handle ~ in pathnames 2002-01-14 --sts
       "`$echo $qCC` "*) ;;
       *)
         for z in $available_tags; do
@@ -669,7 +669,7 @@ EOF
 	if test $status -ne 0 && test ! -d ${xdir}$objdir; then
 	  exit $status
         fi
-      fi 
+      fi
 
       if test -z "$output_obj"; then
         # Place PIC objects in $objdir
@@ -1198,7 +1198,7 @@ EOF
 	continue
 	;;
 
-      -export-dynamic)
+      -export-dynamic|-export-all-symbols)
 	export_dynamic=yes
 	continue
 	;;

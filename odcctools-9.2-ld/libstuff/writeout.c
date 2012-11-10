@@ -2,14 +2,14 @@
  * Copyright (c) 1999 Apple Computer, Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
- * 
+ *
  * This file contains Original Code and/or Modifications of Original Code
  * as defined in and that are subject to the Apple Public Source License
  * Version 2.0 (the 'License'). You may not use this file except in
  * compliance with the License. Please obtain a copy of the License at
  * http://www.opensource.apple.com/apsl/ and read it before using this
  * file.
- * 
+ *
  * The Original Code and all software distributed under the License are
  * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
  * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
@@ -17,7 +17,7 @@
  * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
  * Please see the License for the specific language governing rights and
  * limitations under the License.
- * 
+ *
  * @APPLE_LICENSE_HEADER_END@
  */
 #ifndef RLD
@@ -33,6 +33,10 @@
 #include "stuff/allocate.h"
 #include "stuff/rnd.h"
 #include "stuff/errors.h"
+
+#ifndef O_FSYNC /* for cygwin */
+#define O_FSYNC  O_SYNC
+#endif
 
 static void copy_new_symbol_info(
     char *p,
@@ -124,11 +128,11 @@ uint32_t *throttle)
     time_t toc_time;
     enum bool seen_archive;
     kern_return_t r;
-   
+
 	seen_archive = FALSE;
 	toc_time = time(0);
 
-	writeout_to_mem(archs, narchs, output, (void **)&file, &file_size, 
+	writeout_to_mem(archs, narchs, output, (void **)&file, &file_size,
                         sort_toc, commons_in_toc, library_warnings,
 			&seen_archive);
 
@@ -270,16 +274,16 @@ cleanup:
 
 
 /*
- * writeout_to_mem() creates an ofile in memory from the data structure pointed 
+ * writeout_to_mem() creates an ofile in memory from the data structure pointed
  * to by archs (of narchs size).  Upon successful return, *outputbuf will point
- * to a vm_allocate'd buffer representing the ofile which should be 
+ * to a vm_allocate'd buffer representing the ofile which should be
  * vm_deallocated when it is no longer needed.  length will point to the length
  * of the outputbuf buffer.  The filename parameter is used for error reporting
  * - if filename is NULL, a dummy file name is used.  If there are libraries in
- * the data structures a new table of contents is created and is sorted if 
- * sort_toc is TRUE and commons symbols are included in the table of contents 
- * if commons_in_toc is TRUE.  The normal use will have sort_toc == TRUE and 
- * commons_in_toc == FALSE.  If warnings about unusual libraries are printed if 
+ * the data structures a new table of contents is created and is sorted if
+ * sort_toc is TRUE and commons symbols are included in the table of contents
+ * if commons_in_toc is TRUE.  The normal use will have sort_toc == TRUE and
+ * commons_in_toc == FALSE.  If warnings about unusual libraries are printed if
  * library_warnings == TRUE.
  */
 __private_extern__
@@ -311,12 +315,12 @@ enum bool *seen_archive)
     uint32_t ncmds;
     enum bool swapped;
 
-	/* 
+	/*
 	 * If filename is NULL, we use a dummy file name.
 	 */
 	if(filename == NULL)
 	    filename = "(file written out to memory)";
-        
+
 	/*
 	 * The time the table of contents' are set to and the time to base the
 	 * modification time of the output file to be set to.
@@ -593,7 +597,7 @@ enum bool *seen_archive)
 			pad = rnd(size, 8) - size;
 		    }
 		    else{
-			memcpy(p, archs[i].members[j].unknown_addr, 
+			memcpy(p, archs[i].members[j].unknown_addr,
 			       archs[i].members[j].unknown_size);
 			p += archs[i].members[j].unknown_size;
 			pad = rnd(archs[i].members[j].unknown_size, 8) -
@@ -1057,7 +1061,7 @@ enum bool library_warnings)
 			    continue;
 			if(toc_symbol(symbols + j, commons_in_toc,
 			   object->sections) == TRUE){
-			    strcpy(arch->toc_strings + s, 
+			    strcpy(arch->toc_strings + s,
 				   strings + symbols[j].n_un.n_strx);
 			    arch->toc_entries[r].symbol_name =
 							arch->toc_strings + s;
@@ -1072,7 +1076,7 @@ enum bool library_warnings)
 			    continue;
 			if(toc_symbol_64(symbols64 + j, commons_in_toc,
 			   object->sections64) == TRUE){
-			    strcpy(arch->toc_strings + s, 
+			    strcpy(arch->toc_strings + s,
 				   strings + symbols64[j].n_un.n_strx);
 			    arch->toc_entries[r].symbol_name =
 							arch->toc_strings + s;
@@ -1167,9 +1171,9 @@ enum bool library_warnings)
 	for(i = 0; i < arch->nmembers; i++)
 	    arch->members[i].offset += SARMAG + arch->toc_size;
 	for(i = 0; i < arch->ntocs; i++){
-	    arch->toc_ranlibs[i].ran_un.ran_strx = 
+	    arch->toc_ranlibs[i].ran_un.ran_strx =
 		arch->toc_entries[i].symbol_name - arch->toc_strings;
-	    arch->toc_ranlibs[i].ran_off = 
+	    arch->toc_ranlibs[i].ran_off =
 		arch->members[arch->toc_entries[i].member_index - 1].offset;
 	}
 

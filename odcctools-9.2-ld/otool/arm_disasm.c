@@ -105,13 +105,22 @@ struct disassemble_info { /* HACK'ed up for just what we need here */
 
 #define WORD_ADDRESS(pc) ((pc) & ~0x3)
 
+
+/* HACK: redefines ARM_FEATURE from include/opcode/arm.h
+*/
+#ifdef ARM_FEATURE
+#undef ARM_FEATURE
+#endif
+#define ARM_FEATURE(core, coproc) ((core) | (coproc))
+
+
 /* Format of the disassembler control string :
-   
+
    %%			%
    %<bitfield>d		print the bitfield in decimal
    %<bitfield>x		print the bitfield in hex
    %<bitfield>X		print the bitfield as 1 hex digit without leading "0x"
-   %<bitfield>W         print the bitfield plus one in decimal 
+   %<bitfield>W         print the bitfield plus one in decimal
    %<bitfield>r		print as an ARM register
    %<bitfield>f		print a floating point constant if >7 else a
 			floating point register
@@ -198,7 +207,7 @@ static const struct arm_opcode arm_opcodes[] =
   {ARM_EXT_V5, 0xfe000010, 0xff100010, "mcr2\t%8-11d, %21-23d, %12-15r, cr%16-19d, cr%0-3d, {%5-7d}"},
   {ARM_EXT_V5, 0xfe100010, 0xff100010, "mrc2\t%8-11d, %21-23d, %12-15r, cr%16-19d, cr%0-3d, {%5-7d}"},
 
-  /* V5E "El Segundo" Instructions.  */    
+  /* V5E "El Segundo" Instructions.  */
   {ARM_EXT_V5E, 0xf450f000, 0xfc70f000, "pld\t%a"},
 
   /* CC == NV is undefined in v5 and above. */
@@ -360,7 +369,7 @@ static const struct arm_opcode arm_opcodes[] =
   {ARM_CEXT_XSCALE, 0x0e2c0010, 0x0ffc0ff0, "mia%17'T%17`B%16'T%16`B%c\tacc0, %0-3r, %12-15r"},
   {ARM_CEXT_XSCALE, 0x0c400000, 0x0ff00fff, "mar%c\tacc0, %12-15r, %16-19r"},
   {ARM_CEXT_XSCALE, 0x0c500000, 0x0ff00fff, "mra%c\t%12-15r, %16-19r, acc0"},
-   
+
 #ifdef NOTYET
   /* Intel Wireless MMX technology instructions.  */
 #define FIRST_IWMMXT_INSN 0x0e130130
@@ -419,7 +428,7 @@ static const struct arm_opcode arm_opcodes[] =
   {ARM_EXT_V5, 0x012fff30, 0x0ffffff0, "blx%c\t%0-3r"},
   {ARM_EXT_V5, 0x016f0f10, 0x0fff0ff0, "clz%c\t%12-15r, %0-3r"},
 
-  /* V5E "El Segundo" Instructions.  */    
+  /* V5E "El Segundo" Instructions.  */
   {ARM_EXT_V5E, 0x000000d0, 0x0e1000f0, "ldr%cd\t%12-15r, %s"},
   {ARM_EXT_V5E, 0x000000f0, 0x0e1000f0, "str%cd\t%12-15r, %s"},
   {ARM_EXT_V5ExP, 0x01000080, 0x0ff000f0, "smlabb%c\t%16-19r, %0-3r, %8-11r, %12-15r"},
@@ -449,7 +458,7 @@ static const struct arm_opcode arm_opcodes[] =
   {ARM_EXT_V5ExP, 0x01600050, 0x0ff00ff0, "qdsub%c\t%12-15r, %0-3r, %16-19r"},
 
   /* ARM Instructions.  */
-#ifndef NOTYET 
+#ifndef NOTYET
   /* Must check cpsid first.  */
   {ARM_EXT_V2S, 0x01000090, 0x0fb00ff0, "swp%c%22'b\t%12-15r, %0-3r, [%16-19r]"},
 #endif
@@ -607,7 +616,7 @@ static const struct arm_opcode arm_opcodes[] =
   {ARM_CEXT_MAVERICK, 0x0d100400, 0x0f500f00, "cfldrs%c\tmvf%12-15d, %A"},
   {ARM_CEXT_MAVERICK, 0x0c100400, 0x0f500f00, "cfldrs%c\tmvf%12-15d, %A"},
   {ARM_CEXT_MAVERICK, 0x0d500400, 0x0f500f00, "cfldrd%c\tmvd%12-15d, %A"},
-  {ARM_CEXT_MAVERICK, 0x0c500400, 0x0f500f00, "cfldrd%c\tmvd%12-15d, %A"}, 
+  {ARM_CEXT_MAVERICK, 0x0c500400, 0x0f500f00, "cfldrd%c\tmvd%12-15d, %A"},
   {ARM_CEXT_MAVERICK, 0x0d100500, 0x0f500f00, "cfldr32%c\tmvfx%12-15d, %A"},
   {ARM_CEXT_MAVERICK, 0x0c100500, 0x0f500f00, "cfldr32%c\tmvfx%12-15d, %A"},
   {ARM_CEXT_MAVERICK, 0x0d500500, 0x0f500f00, "cfldr64%c\tmvdx%12-15d, %A"},
@@ -992,7 +1001,7 @@ set_iwmmxt_regnames ()
 
   return iwmmxt_regnames;
 }
-			  
+
 /* Print one instruction from PC on INFO->STREAM.
    Return the size of the instruction (always 4 on ARM). */
 
@@ -1439,10 +1448,10 @@ print_insn_arm (pc, info, given, left)
 			      case 'W':
 				{
 				  long reg;
-				  
+
 				  reg = given >> bitstart;
 				  reg &= (2 << (bitend - bitstart)) - 1;
-				  
+
 				  func (stream, "%d", reg + 1);
 				}
 				break;
@@ -2140,7 +2149,7 @@ print_remainder_bytes(
 void *stream,
 unsigned long left,
 long extra_bytes)
-{ 
+{
   char fmt_str[10];
   int i;
 
@@ -2154,7 +2163,7 @@ long extra_bytes)
   for(i = 3; i > 4 - left; i--)
     fprintf (stream, "0x%02x, ", ((unsigned char *) &extra_bytes)[i]);
 
-  fprintf (stream, "0x%02x\n", ((unsigned char *) &extra_bytes)[4 - left]); 
+  fprintf (stream, "0x%02x\n", ((unsigned char *) &extra_bytes)[4 - left]);
 }
 
 /* Set in_thumb accordingly:
@@ -2170,9 +2179,9 @@ struct symbol *sorted_symbols,
 enum bool *in_thumb)
 {
     long high, low, mid;
- 
+
         low = 0;
-        high = nsorted_symbols - 1; 
+        high = nsorted_symbols - 1;
         mid = (high - low) / 2;
         while(high >= low){
             if(sorted_symbols[mid].n_value == addr){

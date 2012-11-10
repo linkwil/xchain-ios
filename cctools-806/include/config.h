@@ -114,7 +114,7 @@
 /* #undef HAVE_OBJC_OBJC_RUNTIME_H */
 
 /* Define to 1 if libc includes obstacks. */
-#define HAVE_OBSTACK 1
+/* #undef HAVE_OBSTACK */
 
 /* Define to 1 if the system has the type `ptrdiff_t'. */
 #define HAVE_PTRDIFF_T 1
@@ -123,7 +123,7 @@
 #define HAVE_QSORT 1
 
 /* Define to 1 if you have the `qsort_r' function. */
-#define HAVE_QSORT_R 1
+/* #undef HAVE_QSORT_R */
 
 /* Define to 1 if your system has a GNU libc compatible `realloc' function,
    and to 0 otherwise. */
@@ -133,7 +133,7 @@
 #define HAVE_REALPATH 1
 
 /* Define to 1 if you have the `sqrt' function. */
-/* #undef HAVE_SQRT */
+#define HAVE_SQRT 1
 
 /* Define to 1 if stdbool.h conforms to C99. */
 #define HAVE_STDBOOL_H 1
@@ -166,7 +166,7 @@
 #define HAVE_STRING_H 1
 
 /* Define to 1 if you have the `strlcat' function. */
-/* #undef HAVE_STRLCAT */
+#define HAVE_STRLCAT 1
 
 /* Define to 1 if you have the `strmode' function. */
 /* #undef HAVE_STRMODE */

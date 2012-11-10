@@ -50,7 +50,7 @@
 #define HAVE_QSORT 1
 
 /* Define to 1 if you have the `qsort_r' function. */
-#define HAVE_QSORT_R 1
+/* #undef HAVE_QSORT_R */
 
 /* Define to 1 if you have the <stdint.h> header file. */
 #define HAVE_STDINT_H 1
@@ -68,7 +68,7 @@
 #define HAVE_STRING_H 1
 
 /* Define to 1 if you have the `strlcpy' function. */
-/* #undef HAVE_STRLCPY */
+#define HAVE_STRLCPY 1
 
 /* Define to 1 if you have the `strmode' function. */
 /* #undef HAVE_STRMODE */

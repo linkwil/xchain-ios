@@ -11,7 +11,7 @@ mandir		= ${prefix}/share/man
 
 
 CC              = gcc
-CFLAGS          = -m32 -Wall -fno-builtin-round -fno-builtin-trunc
+CFLAGS          = -m32 -fno-builtin-round -fno-builtin-trunc
 WARNINGS	=  -Wall -Wno-long-double -Wno-import
 MDYNAMICNOPIC   = 
 CPPFLAGS        = 

@@ -56,6 +56,7 @@
 #endif
 
 #include "dwarf2dbg.h"
+#include "dwarf2.h"
 #include <filenames.h>
 
 #ifdef HAVE_DOS_BASED_FILE_SYSTEM
@@ -98,7 +99,7 @@
 #include "symbols.h"
 #include "layout.h"
 
-#include "elf/dwarf2.h"
+#include "dwarf2.h"
 
 /* Since we can't generate the prolog until the body is complete, we
    use three different subsegments for .debug_line: one holding the
@@ -421,7 +422,7 @@ dwarf2_where (struct dwarf2_line_info *line)
     *line = current;
 }
 
-/* A hook to allow the target backend to inform the line number state 
+/* A hook to allow the target backend to inform the line number state
    machine of isa changes when assembler debug info is enabled.  */
 
 void
@@ -1670,9 +1671,9 @@ struct frchain *ranges_section)
   section_set(ranges_section);
 
   /* Base Address Entry.  */
-  for (i = 0; i < addr_size; i++) 
+  for (i = 0; i < addr_size; i++)
     out_byte (0xff);
-  for (i = 0; i < addr_size; i++) 
+  for (i = 0; i < addr_size; i++)
     out_byte (0);
 
   /* Range List Entry.  */
@@ -1703,9 +1704,9 @@ struct frchain *ranges_section)
     }
 
   /* End of Range Entry.   */
-  for (i = 0; i < addr_size; i++) 
+  for (i = 0; i < addr_size; i++)
     out_byte (0);
-  for (i = 0; i < addr_size; i++) 
+  for (i = 0; i < addr_size; i++)
     out_byte (0);
 }
 
@@ -2148,7 +2149,7 @@ dwarf2_finish (void)
 #endif
 
       assert (all_segs);
-  
+
 #ifdef OLD
       info_seg = subseg_new (".debug_info", 0);
       abbrev_seg = subseg_new (".debug_abbrev", 0);
@@ -2186,7 +2187,7 @@ dwarf2_finish (void)
 	{
 #ifdef OLD
 	  ranges_seg = subseg_new (".debug_ranges", 0);
-	  bfd_set_section_flags (stdoutput, ranges_seg, 
+	  bfd_set_section_flags (stdoutput, ranges_seg,
 				 SEC_READONLY | SEC_DEBUGGING);
 	  record_alignment (ranges_seg, ffs (2 * sizeof_address) - 1);
 	  out_debug_ranges (ranges_seg);

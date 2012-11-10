@@ -2,7 +2,7 @@
  * Copyright (c) 2004 Apple Computer, Inc. All rights reserved.
  *
  * @APPLE_OSREFERENCE_LICENSE_HEADER_START@
- * 
+ *
  * This file contains Original Code and/or Modifications of Original Code
  * as defined in and that are subject to the Apple Public Source License
  * Version 2.0 (the 'License'). You may not use this file except in
@@ -11,10 +11,10 @@
  * unlawful or unlicensed copies of an Apple operating system, or to
  * circumvent, violate, or enable the circumvention or violation of, any
  * terms of an Apple operating system software license agreement.
- * 
+ *
  * Please obtain a copy of the License at
  * http://www.opensource.apple.com/apsl/ and read it before using this file.
- * 
+ *
  * The Original Code and all software distributed under the License are
  * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
  * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
@@ -22,7 +22,7 @@
  * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
  * Please see the License for the specific language governing rights and
  * limitations under the License.
- * 
+ *
  * @APPLE_OSREFERENCE_LICENSE_HEADER_END@
  */
 /*
@@ -35,7 +35,7 @@
 #include <sys/cdefs.h>
 
 /*
- * ppc_thread_state is the structure that is exported to user threads for 
+ * ppc_thread_state is the structure that is exported to user threads for
  * use in status/mutate calls.  This structure should never change.
  *
  */
@@ -136,7 +136,7 @@ _STRUCT_PPC_THREAD_STATE
 };
 #endif /* __DARWIN_UNIX03 */
 
-#ifdef _POSIX_C_SOURCE
+#if defined(_POSIX_C_SOURCE) || defined(__CYGWIN__)
 
 #pragma pack(4)			/* Make sure the structure stays as we defined it */
 
@@ -187,8 +187,8 @@ _STRUCT_PPC_THREAD_STATE64
 	unsigned int __vrsave;		/* Vector Save Register */
 };
 #else /* !__DARWIN_UNIX03 */
-/* #define _STRUCT_PPC_THREAD_STATE64	struct ppc_thread_state64 */
-#define _STRUCT_PPC_THREAD_STATE64 struct __darwin_ppc_thread_state64
+#define _STRUCT_PPC_THREAD_STATE64	struct ppc_thread_state64
+/* #define _STRUCT_PPC_THREAD_STATE64 struct __darwin_ppc_thread_state64 */
 _STRUCT_PPC_THREAD_STATE64
 {
 	unsigned long long srr0;	/* Instruction address register (PC) */

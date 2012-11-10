@@ -229,13 +229,14 @@ EOF
   if test "$ld_shlibs" = yes; then
     runpath_var=LD_RUN_PATH
     hardcode_libdir_flag_spec='${wl}--rpath ${wl}$libdir'
-    export_dynamic_flag_spec='${wl}--export-dynamic'
     case $host_os in
     cygwin* | mingw*)
+      export_dynamic_flag_spec='${wl}--export-all-symbols'
       # dlltool doesn't understand --whole-archive et. al.
       whole_archive_flag_spec=
       ;;
     *)
+      export_dynamic_flag_spec='${wl}--export-dynamic'
       # ancient GNU ld didn't support --whole-archive et. al.
       if $LD --help 2>&1 | egrep 'no-whole-archive' > /dev/null; then
 	whole_archive_flag_spec="$wlarc"'--whole-archive$convenience '"$wlarc"'--no-whole-archive'

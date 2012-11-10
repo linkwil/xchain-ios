@@ -2,7 +2,7 @@
  * Copyright (c) 2004-2006 Apple Computer, Inc. All rights reserved.
  *
  * @APPLE_OSREFERENCE_LICENSE_HEADER_START@
- * 
+ *
  * This file contains Original Code and/or Modifications of Original Code
  * as defined in and that are subject to the Apple Public Source License
  * Version 2.0 (the 'License'). You may not use this file except in
@@ -11,10 +11,10 @@
  * unlawful or unlicensed copies of an Apple operating system, or to
  * circumvent, violate, or enable the circumvention or violation of, any
  * terms of an Apple operating system software license agreement.
- * 
+ *
  * Please obtain a copy of the License at
  * http://www.opensource.apple.com/apsl/ and read it before using this file.
- * 
+ *
  * The Original Code and all software distributed under the License are
  * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
  * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
@@ -22,7 +22,7 @@
  * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
  * Please see the License for the specific language governing rights and
  * limitations under the License.
- * 
+ *
  * @APPLE_OSREFERENCE_LICENSE_HEADER_END@
  */
 /*
@@ -33,7 +33,7 @@
 #define	_MACH_I386__STRUCTS_H_
 
 /*
- * i386 is the structure that is exported to user threads for 
+ * i386 is the structure that is exported to user threads for
  * use in status/mutate calls.  This structure should never change.
  *
  */
@@ -183,7 +183,7 @@ _STRUCT_FP_STATUS
 };
 typedef _STRUCT_FP_STATUS	fp_status_t;
 #endif /* !__DARWIN_UNIX03 */
-				
+
 /* defn of 80bit x87 FPU or MMX register  */
 
 #if __DARWIN_UNIX03
@@ -219,11 +219,11 @@ _STRUCT_XMM_REG
 };
 #endif /* !__DARWIN_UNIX03 */
 
-/* 
+/*
  * Floating point state.
  */
 
-#if !defined(_POSIX_C_SOURCE) || defined(_DARWIN_C_SOURCE)
+#if !defined(_POSIX_C_SOURCE) || defined(_DARWIN_C_SOURCE) || defined(__CYGWIN__)
 #define FP_STATE_BYTES		512	/* number of chars worth of data from fpu_fcw */
 #endif /* !_POSIX_C_SOURCE || _DARWIN_C_SOURCE */
 
@@ -235,7 +235,7 @@ _STRUCT_X86_FLOAT_STATE32
 	_STRUCT_FP_CONTROL	__fpu_fcw;		/* x87 FPU control word */
 	_STRUCT_FP_STATUS	__fpu_fsw;		/* x87 FPU status word */
 	__uint8_t		__fpu_ftw;		/* x87 FPU tag word */
-	__uint8_t		__fpu_rsrv1;		/* reserved */ 
+	__uint8_t		__fpu_rsrv1;		/* reserved */
 	__uint16_t		__fpu_fop;		/* x87 FPU Opcode */
 	__uint32_t		__fpu_ip;		/* x87 FPU Instruction Pointer offset */
 	__uint16_t		__fpu_cs;		/* x87 FPU Instruction Pointer Selector */
@@ -272,7 +272,7 @@ _STRUCT_X86_AVX_STATE32
 	_STRUCT_FP_CONTROL	__fpu_fcw;		/* x87 FPU control word */
 	_STRUCT_FP_STATUS	__fpu_fsw;		/* x87 FPU status word */
 	__uint8_t		__fpu_ftw;		/* x87 FPU tag word */
-	__uint8_t		__fpu_rsrv1;		/* reserved */ 
+	__uint8_t		__fpu_rsrv1;		/* reserved */
 	__uint16_t		__fpu_fop;		/* x87 FPU Opcode */
 	__uint32_t		__fpu_ip;		/* x87 FPU Instruction Pointer offset */
 	__uint16_t		__fpu_cs;		/* x87 FPU Instruction Pointer Selector */
@@ -319,7 +319,7 @@ _STRUCT_X86_FLOAT_STATE32
 	_STRUCT_FP_CONTROL	fpu_fcw;		/* x87 FPU control word */
 	_STRUCT_FP_STATUS	fpu_fsw;		/* x87 FPU status word */
 	__uint8_t		fpu_ftw;		/* x87 FPU tag word */
-	__uint8_t		fpu_rsrv1;		/* reserved */ 
+	__uint8_t		fpu_rsrv1;		/* reserved */
 	__uint16_t		fpu_fop;		/* x87 FPU Opcode */
 	__uint32_t		fpu_ip;			/* x87 FPU Instruction Pointer offset */
 	__uint16_t		fpu_cs;			/* x87 FPU Instruction Pointer Selector */
@@ -356,7 +356,7 @@ _STRUCT_X86_AVX_STATE32
 	_STRUCT_FP_CONTROL	fpu_fcw;		/* x87 FPU control word */
 	_STRUCT_FP_STATUS	fpu_fsw;		/* x87 FPU status word */
 	__uint8_t		fpu_ftw;		/* x87 FPU tag word */
-	__uint8_t		fpu_rsrv1;		/* reserved */ 
+	__uint8_t		fpu_rsrv1;		/* reserved */
 	__uint16_t		fpu_fop;		/* x87 FPU Opcode */
 	__uint32_t		fpu_ip;			/* x87 FPU Instruction Pointer offset */
 	__uint16_t		fpu_cs;			/* x87 FPU Instruction Pointer Selector */
@@ -512,7 +512,7 @@ _STRUCT_X86_FLOAT_STATE64
 	_STRUCT_FP_CONTROL	__fpu_fcw;		/* x87 FPU control word */
 	_STRUCT_FP_STATUS	__fpu_fsw;		/* x87 FPU status word */
 	__uint8_t		__fpu_ftw;		/* x87 FPU tag word */
-	__uint8_t		__fpu_rsrv1;		/* reserved */ 
+	__uint8_t		__fpu_rsrv1;		/* reserved */
 	__uint16_t		__fpu_fop;		/* x87 FPU Opcode */
 
 	/* x87 FPU Instruction Pointer */
@@ -563,7 +563,7 @@ _STRUCT_X86_AVX_STATE64
 	_STRUCT_FP_CONTROL	__fpu_fcw;		/* x87 FPU control word */
 	_STRUCT_FP_STATUS	__fpu_fsw;		/* x87 FPU status word */
 	__uint8_t		__fpu_ftw;		/* x87 FPU tag word */
-	__uint8_t		__fpu_rsrv1;		/* reserved */ 
+	__uint8_t		__fpu_rsrv1;		/* reserved */
 	__uint16_t		__fpu_fop;		/* x87 FPU Opcode */
 
 	/* x87 FPU Instruction Pointer */
@@ -632,7 +632,7 @@ _STRUCT_X86_FLOAT_STATE64
 	_STRUCT_FP_CONTROL	fpu_fcw;		/* x87 FPU control word */
 	_STRUCT_FP_STATUS	fpu_fsw;		/* x87 FPU status word */
 	__uint8_t		fpu_ftw;		/* x87 FPU tag word */
-	__uint8_t		fpu_rsrv1;		/* reserved */ 
+	__uint8_t		fpu_rsrv1;		/* reserved */
 	__uint16_t		fpu_fop;		/* x87 FPU Opcode */
 
 	/* x87 FPU Instruction Pointer */
@@ -683,7 +683,7 @@ _STRUCT_X86_AVX_STATE64
 	_STRUCT_FP_CONTROL	fpu_fcw;		/* x87 FPU control word */
 	_STRUCT_FP_STATUS	fpu_fsw;		/* x87 FPU status word */
 	__uint8_t		fpu_ftw;		/* x87 FPU tag word */
-	__uint8_t		fpu_rsrv1;		/* reserved */ 
+	__uint8_t		fpu_rsrv1;		/* reserved */
 	__uint16_t		fpu_fop;		/* x87 FPU Opcode */
 
 	/* x87 FPU Instruction Pointer */

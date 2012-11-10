@@ -2,14 +2,14 @@
  * Copyright (c) 2001 Apple Computer, Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
- * 
+ *
  * This file contains Original Code and/or Modifications of Original Code
  * as defined in and that are subject to the Apple Public Source License
  * Version 2.0 (the 'License'). You may not use this file except in
  * compliance with the License. Please obtain a copy of the License at
  * http://www.opensource.apple.com/apsl/ and read it before using this
  * file.
- * 
+ *
  * The Original Code and all software distributed under the License are
  * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
  * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
@@ -17,7 +17,7 @@
  * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
  * Please see the License for the specific language governing rights and
  * limitations under the License.
- * 
+ *
  * @APPLE_LICENSE_HEADER_END@
  */
 #include <stdio.h>
@@ -28,7 +28,7 @@
 #include <fcntl.h>
 #include "stuff/errors.h"
 #include "stuff/breakout.h"
-#include "stuff/round.h"
+#include "stuff/rnd.h"
 #include "stuff/allocate.h"
 #include "config.h"
 
@@ -386,9 +386,9 @@ struct object *object)
 		object->dyst->nextrefsyms *
 		    sizeof(struct dylib_reference);
 	    if(object->split_info_cmd != NULL){
-		object->output_split_info_data = 
+		object->output_split_info_data =
 		(object->object_addr + object->split_info_cmd->dataoff);
-		object->output_split_info_data_size = 
+		object->output_split_info_data_size =
 		    object->split_info_cmd->datasize;
 		object->input_sym_info_size +=
 		    object->split_info_cmd->datasize;
@@ -409,7 +409,7 @@ struct object *object)
 	    if(object->code_sig_cmd != NULL){
 		object->output_code_sig_data = object->object_addr +
 		    object->code_sig_cmd->dataoff;
-		object->output_code_sig_data_size = 
+		object->output_code_sig_data_size =
 		    object->code_sig_cmd->datasize;
 		object->input_sym_info_size =
 		    round(object->input_sym_info_size, 16);
@@ -643,8 +643,8 @@ unsigned long *header_size)
 			dylib_name2 = (char *)pbdylib2 +
 				      pbdylib2->name.offset;
 			strcpy(dylib_name2, changes[j].new);
-			
-			pbdylib2->linked_modules.offset = 
+
+			pbdylib2->linked_modules.offset =
 			    sizeof(struct prebound_dylib_command) +
 			    round(strlen(changes[j].new) + 1, cmd_round);
 			linked_modules1 = (char *)pbdylib1 +

@@ -568,8 +568,8 @@ ifeq ($(HOST_OS),Darwin)
   endif
 else
   ifeq ($(HOST_OS),Cygwin)
-    SharedLinkOptions=-shared -nostdlib -Wl,--export-all-symbols \
-                      -Wl,--enable-auto-import -Wl,--enable-auto-image-base
+    #SharedLinkOptions=-shared -nostdlib -Wl,--export-all-symbols -Wl,--enable-auto-import -Wl,--enable-auto-image-base
+    SharedLinkOptions=-shared -Wl,--export-all-symbols -Wl,--enable-auto-import -Wl,--enable-auto-image-base
   else
     SharedLinkOptions=-shared
   endif

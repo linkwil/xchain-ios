@@ -82,7 +82,15 @@ if { ac_try='${CC-c++} -E conftest.$ac_ext'; { (eval echo \"$ac_try\") 1>&5; (ev
     archive_expsym_cmds='$CC -shared -nostdlib $predep_objects $libobjs $deplibs $postdep_objects $compiler_flags ${wl}-soname $wl$soname ${wl}-retain-symbols-file $wl$export_symbols -o $lib'
 
     hardcode_libdir_flag_spec='${wl}--rpath ${wl}$libdir'
-    export_dynamic_flag_spec='${wl}--export-dynamic'
+
+    case $host_os in
+    cygwin* | mingw*)
+      export_dynamic_flag_spec='${wl}--export-all-symbols'
+      ;;
+    *)
+      export_dynamic_flag_spec='${wl}--export-dynamic'
+      ;;
+    esac
 
     # If archive_cmds runs LD, not CC, wlarc should be empty
     # XXX I think wlarc can be eliminated in ltcf-cxx, but I need to
@@ -560,10 +568,10 @@ case $host_os in
 	if test "$with_gcc" = yes && test "$with_gnu_ld" = no; then
 	  allow_undefined_flag=' ${wl}-expect_unresolved ${wl}\*'
 	  archive_cmds='$CC -shared -nostdlib ${allow_undefined_flag} $predep_objects $libobjs $deplibs $postdep_objects $compiler_flags ${wl}-msym ${wl}-soname ${wl}$soname `test -n "$verstring" && echo ${wl}-set_version ${wl}$verstring` ${wl}-update_registry ${wl}${objdir}/so_locations -o $lib'
-	  
+
 	  hardcode_libdir_flag_spec='${wl}-rpath ${wl}$libdir'
 	  hardcode_libdir_separator=:
-	  
+
 	  # Commands to make compiler produce verbose output that lists
 	  # what "hidden" libraries, object files and flags are used when
 	  # linking a shared library.

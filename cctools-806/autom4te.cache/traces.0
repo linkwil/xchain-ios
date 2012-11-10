@@ -380,13 +380,13 @@ m4trace:configure.ac:71: -1- AC_SUBST([HOST_AR])
 m4trace:configure.ac:71: -1- AC_SUBST_TRACE([HOST_AR])
 m4trace:configure.ac:71: -1- m4_pattern_allow([^HOST_AR$])
 m4trace:configure.ac:77: -2- _m4_warn([obsolete], [The macro `AC_HELP_STRING' is obsolete.
-You should run autoupdate.], [../../lib/autoconf/general.m4:209: AC_HELP_STRING is expanded from...
+You should run autoupdate.], [/usr/src/packages/autoconf/26/autoconf2.5-2.68-1/src/autoconf-2.68/lib/autoconf/general.m4:209: AC_HELP_STRING is expanded from...
 configure.ac:77: the top level])
 m4trace:configure.ac:104: -1- AC_SUBST([ASTARGETS], [$ASTARGETS])
 m4trace:configure.ac:104: -1- AC_SUBST_TRACE([ASTARGETS])
 m4trace:configure.ac:104: -1- m4_pattern_allow([^ASTARGETS$])
 m4trace:configure.ac:107: -2- _m4_warn([obsolete], [The macro `AC_HELP_STRING' is obsolete.
-You should run autoupdate.], [../../lib/autoconf/general.m4:209: AC_HELP_STRING is expanded from...
+You should run autoupdate.], [/usr/src/packages/autoconf/26/autoconf2.5-2.68-1/src/autoconf-2.68/lib/autoconf/general.m4:209: AC_HELP_STRING is expanded from...
 configure.ac:107: the top level])
 m4trace:configure.ac:106: -1- AC_DEFINE_TRACE_LITERAL([CROSS_SYSROOT])
 m4trace:configure.ac:106: -1- m4_pattern_allow([^CROSS_SYSROOT$])
@@ -398,7 +398,7 @@ m4trace:configure.ac:114: -1- m4_pattern_allow([^MDYNAMICNOPIC$])
 m4trace:configure.ac:114: -1- AC_SUBST([MDYNAMICNOPIC], [])
 m4trace:configure.ac:114: -1- AC_SUBST_TRACE([MDYNAMICNOPIC])
 m4trace:configure.ac:114: -1- m4_pattern_allow([^MDYNAMICNOPIC$])
-m4trace:configure.ac:147: -1- _m4_warn([syntax], [AC_LANG_CONFTEST: no AC_LANG_SOURCE call detected in body], [../../lib/autoconf/lang.m4:194: AC_LANG_CONFTEST is expanded from...
+m4trace:configure.ac:147: -1- _m4_warn([syntax], [AC_LANG_CONFTEST: no AC_LANG_SOURCE call detected in body], [/usr/src/packages/autoconf/26/autoconf2.5-2.68-1/src/autoconf-2.68/lib/autoconf/lang.m4:194: AC_LANG_CONFTEST is expanded from...
 configure.ac:147: the top level])
 m4trace:configure.ac:208: -1- AC_SUBST([WARNINGS], [$WARNINGS])
 m4trace:configure.ac:208: -1- AC_SUBST_TRACE([WARNINGS])

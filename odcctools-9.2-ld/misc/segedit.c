@@ -2,14 +2,14 @@
  * Copyright (c) 1999 Apple Computer, Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
- * 
+ *
  * This file contains Original Code and/or Modifications of Original Code
  * as defined in and that are subject to the Apple Public Source License
  * Version 2.0 (the 'License'). You may not use this file except in
  * compliance with the License. Please obtain a copy of the License at
  * http://www.opensource.apple.com/apsl/ and read it before using this
  * file.
- * 
+ *
  * The Original Code and all software distributed under the License are
  * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
  * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
@@ -17,7 +17,7 @@
  * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
  * Please see the License for the specific language governing rights and
  * limitations under the License.
- * 
+ *
  * @APPLE_LICENSE_HEADER_END@
  */
 /*
@@ -46,7 +46,7 @@
 #include <mach/mach_error.h>
 #include "stuff/allocate.h"
 #include "stuff/errors.h"
-#include "stuff/round.h"
+#include "stuff/rnd.h"
 #include "stuff/bytesex.h"
 
 /* These variables are set from the command line arguments */
@@ -424,7 +424,7 @@ replace_sections(void)
 	 * First pass over the load commands and determine if the file is laided
 	 * out in an order that the specified sections can be replaced.  Also
 	 * determine if the specified sections exist in the input file and if
-	 * it is marked with no relocation so it can be replaced. 
+	 * it is marked with no relocation so it can be replaced.
 	 */
 	lcp = load_commands;
 	for(i = 0; i < mhp->ncmds; i++){
@@ -680,7 +680,7 @@ replace_sections(void)
 	 * commands, then the segments with any new sections and finally
 	 * the link edit info.
 	 */
-	if((outfd = open(output, O_CREAT | O_WRONLY | O_TRUNC ,input_mode)) 
+	if((outfd = open(output, O_CREAT | O_WRONLY | O_TRUNC ,input_mode))
 	   == -1)
 	    system_fatal("can't create output file: %s", output);
 
@@ -708,7 +708,7 @@ replace_sections(void)
 			if(write(outfd, (char *)sect_addr,sp->size) !=
 			   (int)sp->size)
 			    system_fatal("can't write new section contents for "
-					 "section (%s,%s) to output file: %s", 
+					 "section (%s,%s) to output file: %s",
 					 rp->segname, rp->sectname, output);
 			if(close(sectfd) == -1)
 		    	    system_error("can't close file: %s to replace "
@@ -729,7 +729,7 @@ replace_sections(void)
 			if(write(outfd,(char *)input_addr + sects[k + j].offset,
 			   sp->size) != (int)sp->size)
 			    system_fatal("can't write section contents for "
-					 "section (%s,%s) to output file: %s", 
+					 "section (%s,%s) to output file: %s",
 					 rp->segname, rp->sectname, output);
 		    }
 		    sp++;
@@ -752,7 +752,7 @@ replace_sections(void)
 		    if(write(outfd, (char *)input_addr + segs[i].fileoff,
 		       segs[i].sgp->filesize) != (int)segs[i].sgp->filesize)
 			system_fatal("can't write segment contents for "
-				     "segment: %s to output file: %s", 
+				     "segment: %s to output file: %s",
 				     segs[i].sgp->segname, output);
 		}
 	    }

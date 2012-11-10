@@ -59,6 +59,10 @@
 #include <servers/bootstrap.h>
 #endif
 
+#ifndef L_SET /* for cygwin */
+#define L_SET  SEEK_SET
+#endif
+
 /*
  * This is used internally to build the table of contents.
  */
@@ -2255,8 +2259,8 @@ struct ofile *ofile)
 	 */
 	if(cmd_flags.q == TRUE && some_tocs == FALSE)
 	    exit(EXIT_SUCCESS);
-	
- 	/* 
+
+ 	/*
 	 * If this is ranlib(1) and we are running in UNIX standard mode and
 	 * the file is not writeable just print and error message and return.
 	 */
@@ -2323,9 +2327,9 @@ struct ofile *ofile)
 		same_toc = FALSE;
 		for(i = 0; i < archs[0].toc_nranlibs; i++){
 		    for(j = 0; j < archs[0].nmembers; j++){
-			if(archs[0].members[j].offset == 
+			if(archs[0].members[j].offset ==
 			   archs[0].toc_ranlibs[i].ran_off){
-			    archs[0].toc_ranlibs[i].ran_off = 
+			    archs[0].toc_ranlibs[i].ran_off =
 				archs[0].members[i].input_member_offset;
 			    break;
 			}
@@ -2340,7 +2344,7 @@ struct ofile *ofile)
 		 */
 		same_toc = TRUE;
 		for(i = 0; i < archs[0].toc_nranlibs; i++){
-		    if(archs[0].toc_ranlibs[i].ran_un.ran_strx != 
+		    if(archs[0].toc_ranlibs[i].ran_un.ran_strx !=
 		       ofile->toc_ranlibs[i].ran_un.ran_strx ||
 		       archs[0].toc_ranlibs[i].ran_off !=
 		       ofile->toc_ranlibs[i].ran_off){
@@ -2681,7 +2685,7 @@ enum byte_sex host_byte_sex)
 }
 
 /*
- * put_toc_member() put the contents member for arch into the buffer p and 
+ * put_toc_member() put the contents member for arch into the buffer p and
  * returns the pointer to the buffer after the table of contents.
  * The table of contents member is:
  *	the archive header
@@ -2754,7 +2758,7 @@ uint32_t library_size,
 int fd,
 uint32_t offset,
 uint32_t size)
-{ 
+{
     uint32_t write_offset, write_size, host_pagesize;
     struct block **p, *block, *before, *after;
     kern_return_t r;
@@ -2811,7 +2815,7 @@ uint32_t size)
 		warning("internal error: output_flush(offset = %u, size = %u)"
 		      " overlaps with flushed block(offset = %u, size = %u)",
 		      offset, size, before->offset, before->size);
-		printf("calling abort()\n");	
+		printf("calling abort()\n");
 		abort();
 	    }
 	}
@@ -2820,7 +2824,7 @@ uint32_t size)
 		warning("internal error: output_flush(offset = %u, size = %u)"
 		      " overlaps with flushed block(offset = %u, size = %u)",
 		      offset, size, after->offset, after->size);
-		printf("calling abort()\n");	
+		printf("calling abort()\n");
 		abort();
 	    }
 	}
@@ -2978,7 +2982,7 @@ void
 final_output_flush(
 char *library,
 int fd)
-{ 
+{
     struct block *block;
     uint32_t write_offset, write_size;
     kern_return_t r;

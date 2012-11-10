@@ -46,7 +46,7 @@
 #include <sys/stat.h>
 #include "stuff/bool.h"
 #include "stuff/ofile.h"
-#include "stuff/round.h"
+#include "stuff/rnd.h"
 #include "stuff/errors.h"
 #include "stuff/allocate.h"
 #include "stuff/execute.h"
@@ -2412,7 +2412,7 @@ unsigned long library_size,
 int fd,
 unsigned long offset,
 unsigned long size)
-{ 
+{
     unsigned long write_offset, write_size, host_pagesize;
     struct block **p, *block, *before, *after;
     kern_return_t r;
@@ -2469,7 +2469,7 @@ unsigned long size)
 		warning("internal error: output_flush(offset = %lu, size = %lu)"
 		      " overlaps with flushed block(offset = %lu, size = %lu)",
 		      offset, size, before->offset, before->size);
-		printf("calling abort()\n");	
+		printf("calling abort()\n");
 		abort();
 	    }
 	}
@@ -2478,7 +2478,7 @@ unsigned long size)
 		warning("internal error: output_flush(offset = %lu, size = %lu)"
 		      " overlaps with flushed block(offset = %lu, size = %lu)",
 		      offset, size, after->offset, after->size);
-		printf("calling abort()\n");	
+		printf("calling abort()\n");
 		abort();
 	    }
 	}
@@ -2616,7 +2616,7 @@ unsigned long size)
 #else
 	    lseek(fd, write_offset, SEEK_SET);
 #endif
-	    
+
 	    if(write(fd, library + write_offset, write_size) !=
 	       (int)write_size)
 		system_fatal("can't write to output file");
@@ -2641,7 +2641,7 @@ void
 final_output_flush(
 char *library,
 int fd)
-{ 
+{
     struct block *block;
     unsigned long write_offset, write_size;
     kern_return_t r;

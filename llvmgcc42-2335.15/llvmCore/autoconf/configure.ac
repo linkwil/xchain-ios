@@ -1476,7 +1476,11 @@ AC_SUBST(RPATH)
 
 dnl Determine linker rdynamic flag
 if test "$llvm_cv_link_use_export_dynamic" = "yes" ; then
-  RDYNAMIC="-Wl,-export-dynamic"
+  if test "$llvm_cv_os_type" = "Cygwin" ; then
+    RDYNAMIC="-Wl,-export-all-symbols"
+  else
+    RDYNAMIC="-Wl,-export-dynamic"
+  fi
 else
   RDYNAMIC=""
 fi

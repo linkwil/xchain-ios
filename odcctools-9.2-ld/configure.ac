@@ -25,28 +25,28 @@ esac
 
 case $target_cpu in
      arm)
-        AC_DEFINE(EMULATED_HOST_CPU_TYPE, 12, [Emulated CPU type])        
+        AC_DEFINE(EMULATED_HOST_CPU_TYPE, 12, [Emulated CPU type])
         AC_DEFINE(EMULATED_HOST_CPU_SUBTYPE, 6, [Emulated CPU subtype])
         AC_DEFINE(DEFAULT_MACH_ARCH, "arm", [Default Mach architecture name])
 	;;
      powerpc)
-        AC_DEFINE(EMULATED_HOST_CPU_TYPE, 18, [Emulated CPU type])        
-        AC_DEFINE(EMULATED_HOST_CPU_SUBTYPE, 100, [Emulated CPU subtype]) 
+        AC_DEFINE(EMULATED_HOST_CPU_TYPE, 18, [Emulated CPU type])
+        AC_DEFINE(EMULATED_HOST_CPU_SUBTYPE, 100, [Emulated CPU subtype])
         AC_DEFINE(DEFAULT_MACH_ARCH, "ppc", [Default Mach architecture name])
 	;;
      powerpc64)
-        AC_DEFINE(EMULATED_HOST_CPU_TYPE, 16777234, [Emulated CPU type])        
-        AC_DEFINE(EMULATED_HOST_CPU_SUBTYPE, 0, [Emulated CPU subtype])        
+        AC_DEFINE(EMULATED_HOST_CPU_TYPE, 16777234, [Emulated CPU type])
+        AC_DEFINE(EMULATED_HOST_CPU_SUBTYPE, 0, [Emulated CPU subtype])
         AC_DEFINE(DEFAULT_MACH_ARCH, "ppc64", [Default Mach architecture name])
 	;;
      i?86)
-        AC_DEFINE(EMULATED_HOST_CPU_TYPE, 7, [Emulated CPU type])        
-        AC_DEFINE(EMULATED_HOST_CPU_SUBTYPE, 3, [Emulated CPU subtype])        
+        AC_DEFINE(EMULATED_HOST_CPU_TYPE, 7, [Emulated CPU type])
+        AC_DEFINE(EMULATED_HOST_CPU_SUBTYPE, 3, [Emulated CPU subtype])
         AC_DEFINE(DEFAULT_MACH_ARCH, "i386", [Default Mach architecture name])
 	;;
      x86_64)
-        AC_DEFINE(EMULATED_HOST_CPU_TYPE, 16777223, [Emulated CPU type])        
-        AC_DEFINE(EMULATED_HOST_CPU_SUBTYPE, 3, [Emulated CPU subtype])        
+        AC_DEFINE(EMULATED_HOST_CPU_TYPE, 16777223, [Emulated CPU type])
+        AC_DEFINE(EMULATED_HOST_CPU_SUBTYPE, 3, [Emulated CPU subtype])
         AC_DEFINE(DEFAULT_MACH_ARCH, "x86_64", [Default Mach architecture name])
 	;;
      *)
@@ -94,7 +94,7 @@ case "$conftargets" in
 esac
 
 AC_MSG_RESULT([$ASTARGETS])
-AC_SUBST([ASTARGETS], [$ASTARGETS]) 
+AC_SUBST([ASTARGETS], [$ASTARGETS])
 
 AC_ARG_WITH([sysroot],
 		AC_HELP_STRING([--with-sysroot],
@@ -274,7 +274,7 @@ AC_COMPILE_IFELSE(
 )
 
 AC_CHECK_FUNCS(
-    [strmode qsort_r qsort getattrlist NSIsSymbolNameDefined strlcpy])
+    [strmode qsort_r qsort getattrlist NSIsSymbolNameDefined strlcpy readlink _NSGetExecutablePath])
 
 AC_CHECK_DECLS([getc_unlocked])
 AH_VERBATIM([HAVE_DECL_GETC_UNLOCKED_REPLACEMENT],

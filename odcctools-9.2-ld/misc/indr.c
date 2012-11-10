@@ -2,14 +2,14 @@
  * Copyright (c) 1999 Apple Computer, Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
- * 
+ *
  * This file contains Original Code and/or Modifications of Original Code
  * as defined in and that are subject to the Apple Public Source License
  * Version 2.0 (the 'License'). You may not use this file except in
  * compliance with the License. Please obtain a copy of the License at
  * http://www.opensource.apple.com/apsl/ and read it before using this
  * file.
- * 
+ *
  * The Original Code and all software distributed under the License are
  * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
  * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
@@ -17,7 +17,7 @@
  * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
  * Please see the License for the specific language governing rights and
  * limitations under the License.
- * 
+ *
  * @APPLE_LICENSE_HEADER_END@
  */
 #include <stdio.h>
@@ -34,13 +34,13 @@
 #include "stuff/hash_string.h"
 #include "stuff/allocate.h"
 #include "stuff/errors.h"
-#include "stuff/round.h"
+#include "stuff/rnd.h"
 #include "stuff/reloc.h"
 
 char *progname = NULL;	/* name of the program for error messages (argv[0]) */
 
 /*
- * If -arch_indr <arch> <listfile> is used then this is an allocated array of 
+ * If -arch_indr <arch> <listfile> is used then this is an allocated array of
  * the names of the listfiles.
  */
 char **list_filenames = NULL;
@@ -297,7 +297,7 @@ char *envp[])
 		    if(arch_flags[j].cputype ==
 			    arch_flags[narch_flags].cputype &&
 		       (arch_flags[j].cpusubtype & ~CPU_SUBTYPE_MASK) ==
-			    (arch_flags[narch_flags].cpusubtype & 
+			    (arch_flags[narch_flags].cpusubtype &
 			     ~CPU_SUBTYPE_MASK) &&
 		       strcmp(arch_flags[j].name,
 			    arch_flags[narch_flags].name) == 0)
@@ -377,7 +377,7 @@ usage()
  * indirect symbol into the symbol hash table as well as the undefined symbol
  * for the indirection.  Then it creates the name of the object file that will
  * be used to put these symbols in.
- */ 
+ */
 static
 void
 process_list(
@@ -686,7 +686,7 @@ struct object *object)
 	/*
 	 * This is a hack to keep the full reference object of a host shared
 	 * library correct when it is processed by this program.  To do this
-	 * The name of the object, "__.FVMLIB_REF", is checked for and if this 
+	 * The name of the object, "__.FVMLIB_REF", is checked for and if this
 	 * is it an undefined symbol for each indirect symbol is added so to
 	 * cause all the indrect objects to be loaded.
 	 */
@@ -876,7 +876,7 @@ struct object *object)
 	/*
 	 * First pass, figrure out the new sizes of the new tables.
 	 */
-	
+
 	/*
 	 * For the symbol table and string table recalculate the their sizes
 	 * with the names of the symbols listed in the indr file renamed and
@@ -993,7 +993,7 @@ struct object *object)
 	 * The new module table will have one extra entry for each indr symbol.
 	 */
 	new_nmodtab = nmodtab + indr_list.used;
-	
+
 	/*
 	 * The new reference table will have two extra entries for each indr
 	 * symbol.  One for the definition of the indr and one for the undefined
@@ -1185,10 +1185,10 @@ struct object *object)
 	    new_refs[nextrefsyms + i*2].flags = REFERENCE_FLAG_DEFINED;
 
 	    if(indr_list.list[i]->existing_symbol == TRUE)
-		new_refs[nextrefsyms + i*2 + 1].isym = 
+		new_refs[nextrefsyms + i*2 + 1].isym =
 		    map[indr_list.list[i]->index];
 	    else
-		new_refs[nextrefsyms + i*2 + 1].isym = 
+		new_refs[nextrefsyms + i*2 + 1].isym =
 		    indr_list.list[i]->index;
 	    new_refs[nextrefsyms + i*2 + 1].flags =
 					    REFERENCE_FLAG_UNDEFINED_NON_LAZY;
@@ -1282,7 +1282,7 @@ struct object *object)
 	    object->output_sym_info_size += object->split_info_cmd->datasize;
 	}
 
-	if(object->hints_cmd != NULL){ 
+	if(object->hints_cmd != NULL){
 	    object->input_sym_info_size +=
 		object->hints_cmd->nhints * sizeof(struct twolevel_hint);
 	    object->output_sym_info_size +=
@@ -1319,9 +1319,9 @@ struct object *object)
 	object->output_loc_relocs = (struct relocation_info *)
 	    (object->object_addr + object->dyst->locreloff);
 	if(object->split_info_cmd != NULL){
-	    object->output_split_info_data = 
+	    object->output_split_info_data =
 	    (object->object_addr + object->split_info_cmd->dataoff);
-	    object->output_split_info_data_size = 
+	    object->output_split_info_data_size =
 		object->split_info_cmd->datasize;
 	}
 	object->output_ext_relocs = ext_relocs;
@@ -1333,7 +1333,7 @@ struct object *object)
 	if(object->code_sig_cmd != NULL){
 	    object->output_code_sig_data = object->object_addr +
 		object->code_sig_cmd->dataoff;
-	    object->output_code_sig_data_size = 
+	    object->output_code_sig_data_size =
 		object->code_sig_cmd->datasize;
 	}
 
@@ -1351,7 +1351,7 @@ struct object *object)
 		object->object_byte_sex);
 	}
 
-	object->st->nsyms = new_nsyms; 
+	object->st->nsyms = new_nsyms;
 	object->st->strsize = new_strsize;
 
 	object->dyst->ilocalsym = 0;

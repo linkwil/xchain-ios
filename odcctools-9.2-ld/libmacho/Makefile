@@ -12,7 +12,7 @@ libdir          = ${exec_prefix}/lib
 CC		= gcc
 AR		= ar
 RANLIB		= ranlib
-CFLAGS		= -m32 -Wall -fno-builtin-round -fno-builtin-trunc
+CFLAGS		= -m32 -fno-builtin-round -fno-builtin-trunc
 WARNINGS	=  -Wall -Wno-long-double -Wno-import
 CPPFLAGS	= 
 DEFS		= -DHAVE_CONFIG_H -D__LITTLE_ENDIAN__=1

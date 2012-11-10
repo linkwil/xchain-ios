@@ -2126,7 +2126,7 @@ void)
 	 * from LC_LOAD_DYLIB, LC_LOAD_WEAK_DYLIB or LC_REEXPORT_DYLIB
 	 * references convert them into using a dylib file so it can be
 	 * searched.  Or remove them from the search list if it can't be
-	 * converted.  Then add all the dependent libraries for that library to 
+	 * converted.  Then add all the dependent libraries for that library to
 	 * the search list.
 	 */
 	indirect_dylib = TRUE;
@@ -6007,11 +6007,7 @@ char *filename)
  * symbols and if found sets *(int *)fail_p.
  */
 static int
-#if __GLIBC_PREREQ(2,8)
-symbol_address_compare (const void *a_p, const void *b_p, void *fail_p)
-#else
 symbol_address_compare (void *fail_p, const void *a_p, const void *b_p)
-#endif
 {
   const struct nlist * const * aa = a_p;
   const struct nlist * a = *aa;
@@ -6162,11 +6158,7 @@ read_dwarf_info(void)
   sst = allocate (sizeof (struct nlist *) * cur_obj->symtab->nsyms);
   for (i = 0; i < cur_obj->symtab->nsyms; i++)
     sst[i] = st + i;
-#if __GLIBC_PREREQ(2,8)
-  qsort_r (sst, cur_obj->symtab->nsyms, sizeof (struct nlist *), symbol_address_compare, &has_stabs);
-#else
   qsort_r (sst, cur_obj->symtab->nsyms, sizeof (struct nlist *), &has_stabs, symbol_address_compare);
-#endif
   if (has_stabs) {
     error_with_cur_obj("has both STABS and DWARF debugging info");
     free (sst);

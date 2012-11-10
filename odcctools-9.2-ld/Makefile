@@ -1,16 +1,16 @@
-CFLAGS = -m32 -Wall -fno-builtin-round -fno-builtin-trunc
+CFLAGS = -m32 -fno-builtin-round -fno-builtin-trunc
 CPPFLAGS = 
 DEFS = -DHAVE_CONFIG_H
 LDFLAGS = -m32
 
 builddir = .
-abs_builddir = /home/h2co3/xchain/odcctools-9.2-ld
+abs_builddir = /home/JC/ios/xchain-ios/odcctools-9.2-ld
 top_builddir = .
-abs_top_builddir = /home/h2co3/xchain/odcctools-9.2-ld
+abs_top_builddir = /home/JC/ios/xchain-ios/odcctools-9.2-ld
 srcdir = .
-abs_srcdir = /home/h2co3/xchain/odcctools-9.2-ld
+abs_srcdir = /home/JC/ios/xchain-ios/odcctools-9.2-ld
 top_srcdir = .
-abs_top_srcdir = /home/h2co3/xchain/odcctools-9.2-ld
+abs_top_srcdir = /home/JC/ios/xchain-ios/odcctools-9.2-ld
 
 
 

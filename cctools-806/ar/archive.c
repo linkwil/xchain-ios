@@ -2,14 +2,14 @@
  * Copyright (c) 1999 Apple Computer, Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
- * 
+ *
  * This file contains Original Code and/or Modifications of Original Code
  * as defined in and that are subject to the Apple Public Source License
  * Version 2.0 (the 'License'). You may not use this file except in
  * compliance with the License. Please obtain a copy of the License at
  * http://www.opensource.apple.com/apsl/ and read it before using this
  * file.
- * 
+ *
  * The Original Code and all software distributed under the License are
  * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
  * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
@@ -17,7 +17,7 @@
  * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
  * Please see the License for the specific language governing rights and
  * limitations under the License.
- * 
+ *
  * @APPLE_LICENSE_HEADER_END@
  */
 /*	$NetBSD: archive.c,v 1.7 1995/03/26 03:27:46 glass Exp $	*/
@@ -97,9 +97,12 @@ int
 open_archive(mode)
 	int mode;
 {
-	int created, fd, nr, r;
+	int created, fd, nr;
 	char buf[SARMAG];
-	
+#ifndef __CYGWIN__
+	int r;
+#endif
+
 	created = 0;
 	if (mode & O_CREAT) {
 		mode |= O_EXCL;
@@ -120,12 +123,13 @@ open_archive(mode)
 	if((mode & O_ACCMODE) == O_RDONLY)
 	    goto skip_flock;
 
-	/* 
-	 * Attempt to place a lock on the opened file - if we get an 
+	/*
+	 * Attempt to place a lock on the opened file - if we get an
 	 * error then someone is already working on this library (or
 	 * it's going across NFS).
 	 */
 opened:
+#ifndef __CYGWIN__
 	r = flock(fd, LOCK_EX|LOCK_NB);
 	if (r && errno == EAGAIN) {
 		/*
@@ -176,6 +180,7 @@ opened:
 			break;
 		}
 	}
+#endif
 skip_flock:
 
 	/*
@@ -415,7 +420,7 @@ copy_ar(cfp, size)
 	char buf[8*1024];
 
 	nr = 0;
-	
+
 	if (!(sz = size))
 		return;
 

@@ -4,13 +4,13 @@ DEFS = -DHAVE_CONFIG_H
 LDFLAGS = -m32
 
 builddir = .
-abs_builddir = /home/h2co3/xchain/cctools-806
+abs_builddir = /home/JC/ios/xchain-ios/cctools-806
 top_builddir = .
-abs_top_builddir = /home/h2co3/xchain/cctools-806
+abs_top_builddir = /home/JC/ios/xchain-ios/cctools-806
 srcdir = .
-abs_srcdir = /home/h2co3/xchain/cctools-806
+abs_srcdir = /home/JC/ios/xchain-ios/cctools-806
 top_srcdir = .
-abs_top_srcdir = /home/h2co3/xchain/cctools-806
+abs_top_srcdir = /home/JC/ios/xchain-ios/cctools-806
 
 
 

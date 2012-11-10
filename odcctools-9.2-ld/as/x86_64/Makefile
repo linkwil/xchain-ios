@@ -17,7 +17,7 @@ VPATH = ./..
 
 CC              = gcc
 WARNINGS	=  -Wall -Wno-long-double -Wno-import
-CFLAGS          = -m32 -Wall -fno-builtin-round -fno-builtin-trunc
+CFLAGS          = -m32 -fno-builtin-round -fno-builtin-trunc
 MDYNAMICNOPIC   = 
 CPPFLAGS        = 
 DEFS            = -DHAVE_CONFIG_H -D__LITTLE_ENDIAN__=1
@@ -44,16 +44,16 @@ MYLDFLAGS	= -L$(top_builddir)/libstuff
 MYLIBS		= $(MYLIBS_$(ARCH))
 
 MYCOMPILEFLAGS  = $(WARNINGS) $(MYWARNINGS) $(DEFS) $(MYDEFS) \
-	$(CPPFLAGS) $(MYINCLUDES) $(CFLAGS) $(MDYNAMICNOPIC) 
+	$(CPPFLAGS) $(MYINCLUDES) $(CFLAGS) $(MDYNAMICNOPIC)
 
 MYLINKFLAGS	= $(LDFLAGS) $(MYLDFLAGS) $(MYLIBS)
 
 CFILES = app.c as.c atof-generic.c atof-ieee.c expr.c fixes.c flonum-const.c \
          flonum-copy.c flonum-mult.c frags.c hash.c hex-value.c input-file.c \
          input-scrub.c layout.c messages.c obstack.c read.c sections.c \
-         symbols.c write_object.c xmalloc.c $(CFILES_$(ARCH))
+         symbols.c write_object.c xmalloc.c dwarf2dbg.c $(CFILES_$(ARCH))
 
-OBJS = $(CFILES:.c=.o) 
+OBJS = $(CFILES:.c=.o)
 
 %.o:	%.c
 	$(CC) $(MYCOMPILEFLAGS) -c -o $@ $<

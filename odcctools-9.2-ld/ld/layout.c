@@ -922,7 +922,7 @@ layout_segments(void)
 			  (unsigned int)segalign);
 	    }
 	    else{
-		segs_read_write_addr = segs_read_only_addr + get_shared_region_sz_from_flag(&arch_flag);
+		segs_read_write_addr = segs_read_only_addr + get_shared_region_size_from_flag(&arch_flag);
 	    }
 	}
 	first_msg = merged_segments;
@@ -1282,8 +1282,8 @@ layout_segments(void)
 	    else if (arch_flag.cputype == CPU_TYPE_ARM) {
 		output_thread_info.flavor = ARM_THREAD_STATE;
 		output_thread_info.count = ARM_THREAD_STATE_COUNT;
-		output_thread_info.entry_point = &(arm.r15);
-		output_thread_info.stack_pointer = &(arm.r13);
+		output_thread_info.entry_point = &(arm.pc);
+		output_thread_info.stack_pointer = &(arm.sp);
 		output_thread_info.state = &arm;
 		output_thread_info.thread_command.cmdsize += sizeof(long) *
 					    ARM_THREAD_STATE_COUNT;
